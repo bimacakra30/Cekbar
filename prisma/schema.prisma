@@ -1,0 +1,184 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+// ── Users ──────────────────────────────────────────────────────────────
+
+enum UserRole {
+  user
+  admin
+  superadmin
+}
+
+enum UserStatus {
+  active
+  inactive
+}
+
+model User {
+  id           Int        @id @default(autoincrement())
+  nama         String     @db.VarChar(100)
+  username     String     @unique @db.VarChar(50)
+  email        String     @unique @db.VarChar(100)
+  no_hp        String     @unique @db.VarChar(20)
+  password     String     @db.VarChar(255)
+  role         UserRole   @default(user)
+  status       UserStatus @default(inactive)
+  email_verified Boolean  @default(false)
+  last_login_at DateTime? @db.Timestamp(0)
+  created_at   DateTime   @default(now()) @db.Timestamp(0)
+  updated_at   DateTime   @updatedAt @db.Timestamp(0)
+
+  orders Order[]
+
+  @@map("users")
+}
+
+// ── Services ───────────────────────────────────────────────────────────
+
+model Service {
+  id                Int      @id @default(autoincrement())
+  service_id        String   @unique @db.VarChar(100)
+  service_name      String   @db.VarChar(255)
+  group_name        String   @db.VarChar(100)
+  category          String?  @db.VarChar(50)
+  api_provider      String   @default("dhru") @db.VarChar(50)
+  api_service_id    String?  @db.VarChar(100)
+  api_type          String?  @db.VarChar(50)
+  buy_price         Decimal  @default(0) @db.Decimal(12, 2)
+  sell_price        Decimal  @default(0) @db.Decimal(12, 2)
+  time_info         String   @default("") @db.VarChar(255)
+  info              String?  @db.Text
+  min_qty           Int      @default(1)
+  max_qty           String   @default("") @db.VarChar(10)
+  custom_field_name String   @default("") @db.VarChar(100)
+  custom_field_regex String  @default("") @db.VarChar(255)
+  custom_field_maxlen String @default("") @db.VarChar(10)
+  allow_bulk        Boolean  @default(false)
+  is_active         Boolean  @default(true)
+  last_synced_at    DateTime? @db.Timestamp(0)
+  created_at        DateTime  @default(now()) @db.Timestamp(0)
+  updated_at        DateTime  @updatedAt @db.Timestamp(0)
+
+  @@map("services")
+}
+
+// ── Orders ─────────────────────────────────────────────────────────────
+
+enum OrderStatus {
+  PENDING_PAYMENT
+  PENDING
+  PROCESSING
+  SUCCESS
+  FAILED
+  EXPIRED
+}
+
+model Order {
+  id             Int         @id @default(autoincrement())
+  order_id       String      @unique @db.VarChar(50)
+  user_id        Int
+  service_id     String      @db.VarChar(100)
+  service_name   String      @db.VarChar(255)
+  imei_list      Json
+  total_price    Decimal     @default(0) @db.Decimal(12, 2)
+  status         OrderStatus @default(PENDING_PAYMENT)
+  dhru_order_id  String?     @db.VarChar(100)
+  ceir_order_id  String?     @db.VarChar(100)
+  roamer_months  Int?        @db.TinyInt
+  status_note    String?     @db.VarChar(255)
+  unit_price     Decimal     @default(0) @db.Decimal(12, 2)
+  results        Json?
+  created_at     DateTime    @default(now()) @db.Timestamp(0)
+  updated_at     DateTime    @updatedAt @db.Timestamp(0)
+  completed_at   DateTime?   @db.Timestamp(0)
+
+  user     User      @relation(fields: [user_id], references: [id])
+  payments Payment[]
+
+  @@index([user_id], map: "idx_user_id")
+  @@index([status], map: "idx_status")
+  @@map("orders")
+}
+
+// ── Payments ───────────────────────────────────────────────────────────
+
+enum PaymentStatus {
+  MENUNGGU
+  LUNAS
+  KADALUARSA
+  GAGAL
+}
+
+model Payment {
+  id                    Int           @id @default(autoincrement())
+  payment_id            String        @unique @db.VarChar(50)
+  order_id              String        @db.VarChar(50)
+  amount                Decimal       @db.Decimal(12, 2)
+  fee                   Decimal       @default(0) @db.Decimal(12, 2)
+  total_amount          Decimal       @db.Decimal(12, 2)
+  qris_id               String?       @db.VarChar(100)
+  trx_id                String?       @db.VarChar(100)
+  qr_image              String?       @db.Text
+  qris_url              String?       @db.Text
+  gopay_transaction_id  String?       @db.VarChar(100)
+  payer_issuer          String?       @db.VarChar(50)
+  payment_type          String?       @db.VarChar(50)
+  status                PaymentStatus @default(MENUNGGU)
+  confirmed_at          DateTime?     @db.Timestamp(0)
+  expires_at            DateTime?     @db.Timestamp(0)
+  created_at            DateTime      @default(now()) @db.Timestamp(0)
+  updated_at            DateTime      @updatedAt @db.Timestamp(0)
+
+  order Order @relation(fields: [order_id], references: [order_id])
+
+  @@index([order_id], map: "idx_order_id")
+  @@index([status], map: "idx_payment_status")
+  @@map("payments")
+}
+
+// ── System Settings ────────────────────────────────────────────────────
+
+model SystemSetting {
+  key_name   String   @id @db.VarChar(100)
+  value      String   @db.Text
+  updated_at DateTime @updatedAt @db.Timestamp(0)
+
+  @@map("system_settings")
+}
+
+// ── Password Reset Tokens ─────────────────────────────────────────────
+
+model PasswordReset {
+  id         Int      @id @default(autoincrement())
+  email      String   @db.VarChar(100)
+  token      String   @unique @db.VarChar(100)
+  used       Boolean  @default(false)
+  expires_at DateTime @db.Timestamp(0)
+  created_at DateTime @default(now()) @db.Timestamp(0)
+
+  @@index([email], map: "idx_reset_email")
+  @@index([token], map: "idx_reset_token")
+  @@map("password_resets")
+}
+
+// ── Email Verification OTP ────────────────────────────────────────────
+
+model EmailVerification {
+  id         Int      @id @default(autoincrement())
+  email      String   @db.VarChar(100)
+  otp        String   @db.VarChar(6)
+  used       Boolean  @default(false)
+  expires_at DateTime @db.Timestamp(0)
+  created_at DateTime @default(now()) @db.Timestamp(0)
+
+  @@index([email], map: "idx_verify_email")
+  @@map("email_verifications")
+}
