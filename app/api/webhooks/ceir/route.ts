@@ -30,8 +30,8 @@ export async function POST(req: NextRequest) {
     }
 
     const expected = crypto
-      .createHmac("sha256", webhookSecret)
-      .update(rawBody)
+      .createHash("sha256")
+      .update(rawBody + webhookSecret)
       .digest("hex");
 
     const isValid =
