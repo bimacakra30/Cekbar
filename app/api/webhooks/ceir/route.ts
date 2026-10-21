@@ -58,9 +58,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
-    if (!data || !data.order_id || !data.status) {
+    if (!data || data.order_id == null || !data.status) {
       console.error("[CEIR Webhook] Missing data.order_id or data.status");
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    }
+
+    // Webhook uji dari CEIRID — order_id: 0 bukan order asli, langsung balas OK
+    if (data.order_id === 0 || data.order_id === "0") {
+      console.log("[CEIR Webhook] Test webhook received, acknowledged");
+      return NextResponse.json({ ok: true, message: "Test acknowledged" });
     }
 
     const dbStatus = STATUS_MAP[data.status] ?? "PROCESSING";
