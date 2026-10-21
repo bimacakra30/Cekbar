@@ -30,6 +30,7 @@ export function ServiceOrderPage({ services, categorySlug, categoryLabel }: Serv
   const [imeiText, setImeiText] = useState("");
   const [agreed, setAgreed] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [orderError, setOrderError] = useState<string | null>(null);
   const [showTnC, setShowTnC] = useState(false);
   const [mounted, setMounted] = useState(false);
 
@@ -50,6 +51,11 @@ export function ServiceOrderPage({ services, categorySlug, categoryLabel }: Serv
     return () => { document.body.style.overflow = ""; };
   }, [showTnC]);
 
+  // Auto-clear error when user changes input
+  useEffect(() => {
+    setOrderError(null);
+  }, [selectedIndex, imeiText]);
+
   const { valid: validImeis, invalid: invalidImeis } = parseIMEIList(imeiText);
   const totalPrice = validImeis.length * service.pricePerUnit;
   const canSubmit = validImeis.length > 0 && agreed && !isSubmitting;
@@ -58,6 +64,7 @@ export function ServiceOrderPage({ services, categorySlug, categoryLabel }: Serv
     if (!canSubmit) return;
 
     setIsSubmitting(true);
+    setOrderError(null);
     try {
       type PlaceOrderResult = Order & { paymentId?: string; qrisId?: string; qrImage?: string };
       const order = await placeOrder({
@@ -74,6 +81,8 @@ export function ServiceOrderPage({ services, categorySlug, categoryLabel }: Serv
       }
     } catch (err) {
       console.error("handleSubmit error:", err);
+      const message = err instanceof Error ? err.message : "Terjadi kesalahan, silakan coba lagi.";
+      setOrderError(message);
     } finally {
       setIsSubmitting(false);
     }
@@ -287,6 +296,21 @@ export function ServiceOrderPage({ services, categorySlug, categoryLabel }: Serv
                     </>
                   )}
                 </button>
+
+                {orderError && (
+                  <div className="mt-3 flex items-start gap-2.5 px-3.5 py-3 bg-red-500/10 border border-red-500/20 rounded-xl">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold text-red-400">Gagal membuat pesanan</p>
+                      <p className="text-[11px] text-red-300/80 mt-0.5">{orderError}</p>
+                    </div>
+                    <button
+                      onClick={() => setOrderError(null)}
+                      className="text-red-400/60 hover:text-red-400 transition-colors shrink-0 mt-0.5"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                )}
 
                 {invalidImeis.length > 0 && validImeis.length > 0 && (
                   <p className="text-[10px] text-slate-500 text-center mt-3">

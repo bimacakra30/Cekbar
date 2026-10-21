@@ -69,7 +69,9 @@ export async function placeOrder(params: {
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.error ?? "Gagal membuat order");
+    const error = new Error(err.error ?? "Gagal membuat order") as Error & { errorCode?: string };
+    error.errorCode = err.errorCode;
+    throw error;
   }
 
   const data = await res.json();

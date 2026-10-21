@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { createQrisPayment, getGopayApiUrl } from "@/lib/gopay";
 import { getSessionUser } from "@/lib/session";
+import { getBalance } from "@/lib/ceirid";
 
 function generateId(type: "ORD" | "PAY"): string {
   const ts = new Date().toISOString().replace(/[-:T.Z]/g, "").slice(2, 14);
@@ -26,7 +27,14 @@ export async function POST(req: NextRequest) {
 
     const dbService = await prisma.service.findFirst({
       where: { service_name: serviceName },
-      select: { service_id: true, service_name: true, sell_price: true, is_active: true },
+      select: {
+        service_id: true,
+        service_name: true,
+        sell_price: true,
+        buy_price: true,
+        is_active: true,
+        api_provider: true,
+      },
     });
 
     if (!dbService) {
@@ -44,6 +52,41 @@ export async function POST(req: NextRequest) {
     }
 
     const totalPrice = imeiList.length * pricePerUnit;
+
+    // ── Pre-check saldo CEIR sebelum buat order ──────────────────────
+    if (dbService.api_provider === "ceir") {
+      const buyPricePerUnit = Number(dbService.buy_price);
+      const totalBuyCost = imeiList.length * buyPricePerUnit;
+
+      try {
+        const balanceData = await getBalance();
+        const currentCredit = balanceData.credit;
+
+        console.log(
+          `[Order] CEIR balance check: credit=${currentCredit}, needed=${totalBuyCost} (${imeiList.length} × ${buyPricePerUnit})`
+        );
+
+        if (currentCredit < totalBuyCost) {
+          return NextResponse.json(
+            {
+              error: "Layanan sedang tidak tersedia untuk saat ini. Silakan hubungi admin.",
+              errorCode: "INSUFFICIENT_PROVIDER_BALANCE",
+            },
+            { status: 503 }
+          );
+        }
+      } catch (balanceErr) {
+        console.error("[Order] Gagal cek saldo CEIR:", balanceErr);
+        return NextResponse.json(
+          {
+            error: "Tidak dapat memverifikasi ketersediaan layanan. Silakan coba beberapa saat lagi.",
+            errorCode: "PROVIDER_UNAVAILABLE",
+          },
+          { status: 503 }
+        );
+      }
+    }
+    // ────────────────────────────────────────────────────────────────
 
     const orderId = generateId("ORD");
     const paymentId = generateId("PAY");
