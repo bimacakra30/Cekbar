@@ -30,8 +30,8 @@ export async function POST(req: NextRequest) {
     }
 
     const expected = crypto
-      .createHash("sha256")
-      .update(rawBody + webhookSecret)
+      .createHmac("sha256", webhookSecret)
+      .update(rawBody)
       .digest("hex");
 
     const isValid =
@@ -40,6 +40,11 @@ export async function POST(req: NextRequest) {
 
     if (!isValid) {
       console.error("[CEIR Webhook] Invalid HMAC signature");
+      console.error("[CEIR Webhook] Received sig :", signature);
+      console.error("[CEIR Webhook] Expected sig :", expected);
+      console.error("[CEIR Webhook] Raw body len  :", rawBody.length);
+      console.error("[CEIR Webhook] Secret len    :", webhookSecret.length);
+      console.error("[CEIR Webhook] Raw body first 200:", rawBody.substring(0, 200));
       return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
     }
 
