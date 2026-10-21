@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   Mail,
-  MessageSquare,
+  Send,
   Clock,
   ArrowLeft,
 } from "lucide-react";
@@ -37,13 +37,13 @@ const contactInfos = [
     glow: "shadow-blue-600/25",
   },
   {
-    icon: MessageSquare,
-    title: "WhatsApp",
-    value: "+62 812-3456-7890",
+    icon: Send,
+    title: "Telegram",
+    value: "@cekbar",
     desc: "Chat langsung dengan tim kami",
-    href: "https://wa.me/6281234567890",
-    color: "from-emerald-500 to-emerald-700",
-    glow: "shadow-emerald-600/25",
+    href: "https://t.me/cekbar",
+    color: "from-sky-400 to-sky-600",
+    glow: "shadow-sky-500/25",
   },
   {
     icon: Clock,
