@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { StatCard } from "./stat-card";
 import { RecentOrdersTable } from "./recent-orders-table";
 import { DashboardSkeleton } from "./dashboard-skeleton";
@@ -48,7 +49,7 @@ export function DashboardContent() {
     <div className="space-y-6 animate-fade-in">
 
       {/* Info Modal */}
-      {showModal && (
+      {showModal && createPortal(
         <div
           className="fixed inset-0 z-[999] flex items-center justify-center p-4"
           style={{ animation: "fadeIn 0.2s ease-out" }}
@@ -164,19 +165,21 @@ export function DashboardContent() {
             </div>
           </div>
         </div>
-      )}
+      , document.body)}
 
-      {/* CSS animations */}
-      <style dangerouslySetInnerHTML={{ __html: `
-        @keyframes fadeIn {
-          from { opacity: 0; }
-          to { opacity: 1; }
-        }
-        @keyframes scaleIn {
-          from { opacity: 0; transform: scale(0.95) translateY(10px); }
-          to { opacity: 1; transform: scale(1) translateY(0); }
-        }
-      `}} />
+      {/* CSS animations for modal */}
+      {showModal && createPortal(
+        <style dangerouslySetInnerHTML={{ __html: `
+          @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+          }
+          @keyframes scaleIn {
+            from { opacity: 0; transform: scale(0.95) translateY(10px); }
+            to { opacity: 1; transform: scale(1) translateY(0); }
+          }
+        `}} />,
+      document.body)}
 
       <section
         className="relative rounded-2xl overflow-hidden p-6 sm:p-8"

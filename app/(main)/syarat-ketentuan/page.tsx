@@ -9,9 +9,10 @@ const sections = [
     title: "Estimasi Waktu Proses",
     color: "text-blue-500",
     content: (
-      <p className="text-sm leading-relaxed text-foreground font-semibold">
-        Proses 1 Sampai 2 Hari
-      </p>
+      <div className="text-sm leading-relaxed text-foreground space-y-1">
+        <p className="font-semibold">Proses 1 Sampai 2 Hari</p>
+        <p className="text-muted-foreground">Pengerjaan 30 menit - 3 jam, maksimal 1 hari jika antrian full.</p>
+      </div>
     ),
   },
   {
@@ -20,6 +21,10 @@ const sections = [
     color: "text-amber-500",
     content: (
       <ul className="space-y-2.5 text-sm text-foreground/90 leading-relaxed">
+        <li className="flex items-start gap-2">
+          <span className="text-blue-500 mt-0.5 shrink-0">●</span>
+          <span>Pastikan status CEIR adalah <span className="font-semibold text-emerald-600 dark:text-emerald-400">UNKNOWN</span> sebelum melakukan Add Roamer.</span>
+        </li>
         <li className="flex items-start gap-2">
           <span className="text-amber-500 mt-0.5 shrink-0">●</span>
           <span>IMEI wajib diketik/input dengan benar.</span>
