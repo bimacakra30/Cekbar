@@ -50,11 +50,6 @@ COPY --from=builder /app/prisma.config.ts ./prisma.config.ts
 # dotenv needed by prisma.config.ts
 COPY --from=builder /app/node_modules/dotenv ./node_modules/dotenv
 
-# tsx + seed dependencies (for auto-seed on first run)
-COPY --from=builder /app/node_modules/tsx ./node_modules/tsx
-COPY --from=builder /app/node_modules/.bin/tsx ./node_modules/.bin/tsx
-COPY --from=builder /app/node_modules/bcryptjs ./node_modules/bcryptjs
-
 # Entrypoint script
 COPY --chown=nextjs:nodejs docker-entrypoint.sh ./
 RUN chmod +x docker-entrypoint.sh
