@@ -15,9 +15,14 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Dummy DATABASE_URL — prisma generate & next build don't need real DB
-RUN DATABASE_URL="mysql://build:build@localhost:3306/build" npx prisma generate
-RUN DATABASE_URL="mysql://build:build@localhost:3306/build" npm run build
+# Dummy env vars for build — no real DB/session needed at compile time
+ENV DATABASE_URL="mysql://build:build@localhost:3306/build"
+ENV SESSION_SECRET="docker-build-placeholder-secret-32chars"
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV NODE_ENV=production
+
+RUN npx prisma generate
+RUN npm run build
 
 # ── Stage 3: Production ─────────────────────────────────────────────
 FROM node:22-alpine AS runner
