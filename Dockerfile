@@ -15,13 +15,9 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Prisma generate needs to run before next build
-RUN npx prisma generate
-
-ENV NEXT_TELEMETRY_DISABLED=1
-ENV NODE_ENV=production
-
-RUN npm run build
+# Dummy DATABASE_URL — prisma generate & next build don't need real DB
+RUN DATABASE_URL="mysql://build:build@localhost:3306/build" npx prisma generate
+RUN DATABASE_URL="mysql://build:build@localhost:3306/build" npm run build
 
 # ── Stage 3: Production ─────────────────────────────────────────────
 FROM node:22-alpine AS runner
@@ -33,16 +29,30 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nextjs
 
-# Copy only what's needed to run
+# Copy standalone app
 COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
-# Prisma needs these at runtime
+# Prisma runtime files
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
+COPY --from=builder /app/node_modules/.bin/prisma ./node_modules/.bin/prisma
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/prisma.config.ts ./prisma.config.ts
+
+# dotenv needed by prisma.config.ts
+COPY --from=builder /app/node_modules/dotenv ./node_modules/dotenv
+
+# tsx + seed dependencies (for auto-seed on first run)
+COPY --from=builder /app/node_modules/tsx ./node_modules/tsx
+COPY --from=builder /app/node_modules/.bin/tsx ./node_modules/.bin/tsx
+COPY --from=builder /app/node_modules/bcryptjs ./node_modules/bcryptjs
+
+# Entrypoint script
+COPY --chown=nextjs:nodejs docker-entrypoint.sh ./
+RUN chmod +x docker-entrypoint.sh
 
 USER nextjs
 
@@ -51,5 +61,4 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-CMD ["node", "server.js"]
-
+CMD ["./docker-entrypoint.sh"]
