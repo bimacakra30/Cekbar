@@ -22,7 +22,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           showMenuOnDesktop={false}
         />
 
-        <main className="flex-1 px-5 sm:px-8 py-6">
+        <main id="main-content" className="flex-1 px-5 sm:px-8 py-6">
           {children}
         </main>
       </div>

@@ -45,8 +45,8 @@
   --color-sidebar-border: var(--sidebar-border);
 
   /* Font */
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-inter);
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
 }
 
 /* ---- Light Mode ---- */

@@ -8,7 +8,7 @@ export type SessionData = {
   nama: string;
   username: string;
   email: string;
-  role: "user" | "admin" | "superadmin";
+  role: "user" | "reseller" | "admin" | "superadmin";
   isLoggedIn: boolean;
 };
 
@@ -21,10 +21,12 @@ const defaultSession: SessionData = {
   isLoggedIn: false,
 };
 
-const SESSION_SECRET = process.env.SESSION_SECRET || "bara-system-default-secret-key-change-me-in-production-32chars";
+if (!process.env.SESSION_SECRET) {
+  throw new Error("SESSION_SECRET environment variable is required. Set it in .env file.");
+}
 
 export const sessionOptions: SessionOptions = {
-  password: SESSION_SECRET,
+  password: process.env.SESSION_SECRET,
   cookieName: "bara_session",
   cookieOptions: {
     httpOnly: true,
@@ -72,4 +74,46 @@ export async function getSessionUser(req: NextRequest): Promise<SessionData | nu
   } catch {
     return null;
   }
+}
+
+/**
+ * Require admin/superadmin session. Returns session data or a 401/403 response.
+ */
+export async function requireAdmin(req: NextRequest): Promise<SessionData | NextResponse> {
+  const user = await getSessionUser(req);
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (user.role !== "admin" && user.role !== "superadmin") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+  return user;
+}
+
+export function verifyCsrfOrigin(req: NextRequest): boolean {
+  const origin = req.headers.get("origin");
+  const referer = req.headers.get("referer");
+  const host = req.headers.get("host");
+  
+  if (!host) return false;
+  
+  if (origin) {
+    try {
+      const originHost = new URL(origin).host;
+      return originHost === host;
+    } catch {
+      return false;
+    }
+  }
+  
+  if (referer) {
+    try {
+      const refererHost = new URL(referer).host;
+      return refererHost === host;
+    } catch {
+      return false;
+    }
+  }
+  
+  return false;
 }

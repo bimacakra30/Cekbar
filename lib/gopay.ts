@@ -66,6 +66,7 @@ export async function createQrisPayment(
       "X-API-Key": config.apiKey,
     },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(15000),
   });
 
   if (!res.ok) {
@@ -129,6 +130,7 @@ export async function checkPayment(
       amount: Math.round(amount),
       trx_id: trxId,
     }),
+    signal: AbortSignal.timeout(15000),
   });
 
   if (!res.ok) {
@@ -177,7 +179,7 @@ export async function checkQrStatus(qrisId: string): Promise<QrStatusResult> {
   const config = getConfig();
   const url = `${config.apiUrl}/api/qr-status/${qrisId}`;
 
-  const res = await fetch(url, { method: "GET" });
+  const res = await fetch(url, { method: "GET", signal: AbortSignal.timeout(15000) });
 
   if (!res.ok) {
     console.log(`[GoPay] qr-status ${qrisId}: HTTP ${res.status}`);
@@ -211,7 +213,14 @@ export function verifyWebhookSignature(
     .update(payload)
     .digest("hex");
 
-  return signature === expectedSignature;
+  try {
+    return crypto.timingSafeEqual(
+      Buffer.from(signature, "hex"),
+      Buffer.from(expectedSignature, "hex")
+    );
+  } catch {
+    return false;
+  }
 }
 
 /**

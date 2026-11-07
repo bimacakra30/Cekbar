@@ -1,9 +1,15 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { getSessionUser } from "@/lib/session";
 
 export async function GET(req: NextRequest) {
   try {
+    const user = await getSessionUser(req);
+    if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
     const { searchParams } = new URL(req.url);
     const group = searchParams.get("group");
     const search = searchParams.get("search");
@@ -49,6 +55,11 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const user = await getSessionUser(req);
+    if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
     const body = await req.json();
 
     const {

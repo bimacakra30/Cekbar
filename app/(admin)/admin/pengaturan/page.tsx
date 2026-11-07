@@ -132,7 +132,7 @@ export default function AdminPengaturanPage() {
               disabled={loadingMaintenance || savingMaintenance}
               className={cn(
                 "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent",
-                "transition-colors duration-200 ease-in-out focus:outline-none",
+                "transition-colors duration-200 ease-in-out focus-visible:ring-2 focus-visible:ring-brand-primary/50 focus-visible:outline-none",
                 "disabled:opacity-50 disabled:cursor-not-allowed",
                 maintenanceEnabled
                   ? "bg-amber-500"
@@ -140,6 +140,7 @@ export default function AdminPengaturanPage() {
               )}
               role="switch"
               aria-checked={maintenanceEnabled}
+              aria-label="Toggle maintenance mode"
             >
               <span
                 className={cn(

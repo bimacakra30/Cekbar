@@ -3,6 +3,9 @@ import bcrypt from "bcryptjs";
 import prisma from "@/lib/prisma";
 import { sessionOptions, type SessionData } from "@/lib/session";
 import { getIronSession } from "iron-session";
+import { createRateLimiter } from "@/lib/rate-limit";
+
+const loginLimiter = createRateLimiter({ interval: 15 * 60 * 1000, maxRequests: 5 });
 
 export async function POST(req: NextRequest) {
   try {
@@ -16,6 +19,14 @@ export async function POST(req: NextRequest) {
     }
 
     const loginVal = String(login).trim();
+
+    const rlResult = loginLimiter.check(loginVal.toLowerCase());
+    if (!rlResult.allowed) {
+      return NextResponse.json(
+        { error: "Terlalu banyak percobaan login. Silakan tunggu 15 menit." },
+        { status: 429 }
+      );
+    }
 
     const user = await prisma.user.findFirst({
       where: {
@@ -49,6 +60,7 @@ export async function POST(req: NextRequest) {
     const valid = await bcrypt.compare(password, user.password);
 
     if (!valid) {
+      loginLimiter.check(loginVal.toLowerCase());
       return NextResponse.json(
         { error: "Akun tidak ditemukan atau password salah" },
         { status: 401 }
@@ -82,7 +94,7 @@ export async function POST(req: NextRequest) {
 
     return response;
   } catch (error) {
-    console.error("Login error:", error);
+    console.error("[Login] Error");
     return NextResponse.json(
       { error: "Terjadi kesalahan server" },
       { status: 500 }

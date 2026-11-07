@@ -38,6 +38,10 @@ export async function PATCH(
     const data: Record<string, unknown> = {};
 
     if (body.role !== undefined) {
+      const VALID_ROLES = ["user", "reseller", "admin"];
+      if (!VALID_ROLES.includes(body.role)) {
+        return NextResponse.json({ error: "Role tidak valid" }, { status: 400 });
+      }
       if (isAdmin) {
         return NextResponse.json({ error: "Admin tidak memiliki izin untuk mengubah role" }, { status: 403 });
       }
@@ -48,6 +52,10 @@ export async function PATCH(
     }
 
     if (body.status !== undefined) {
+      const VALID_STATUSES = ["active", "inactive"];
+      if (!VALID_STATUSES.includes(body.status)) {
+        return NextResponse.json({ error: "Status tidak valid" }, { status: 400 });
+      }
       if (isAdmin && target.role !== "user") {
         return NextResponse.json({ error: "Admin hanya dapat mengubah status pengguna biasa" }, { status: 403 });
       }
@@ -55,10 +63,28 @@ export async function PATCH(
     }
 
     if (body.username !== undefined) {
+      const existingUsername = await prisma.user.findFirst({
+        where: { username: body.username, id: { not: Number(id) } },
+        select: { id: true },
+      });
+      if (existingUsername) {
+        return NextResponse.json({ error: "Username sudah digunakan" }, { status: 409 });
+      }
       data.username = body.username;
     }
 
     if (body.email !== undefined) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(body.email)) {
+        return NextResponse.json({ error: "Format email tidak valid" }, { status: 400 });
+      }
+      const existingEmail = await prisma.user.findFirst({
+        where: { email: body.email, id: { not: Number(id) } },
+        select: { id: true },
+      });
+      if (existingEmail) {
+        return NextResponse.json({ error: "Email sudah digunakan" }, { status: 409 });
+      }
       data.email = body.email;
     }
 
@@ -73,7 +99,7 @@ export async function PATCH(
 
     return NextResponse.json({ message: "Pengguna berhasil diupdate" });
   } catch (error) {
-    console.error("Update user error:", error);
+    console.error("[AdminUsers] PATCH error");
     return NextResponse.json({ error: "Gagal mengupdate pengguna" }, { status: 500 });
   }
 }
@@ -106,7 +132,7 @@ export async function DELETE(
 
     return NextResponse.json({ message: "Pengguna berhasil dihapus" });
   } catch (error) {
-    console.error("Delete user error:", error);
+    console.error("[AdminUsers] DELETE error");
     return NextResponse.json({ error: "Gagal menghapus pengguna" }, { status: 500 });
   }
 }

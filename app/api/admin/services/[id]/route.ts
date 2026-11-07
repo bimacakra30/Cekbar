@@ -1,6 +1,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { getSessionUser } from "@/lib/session";
 
 export async function PATCH(
   req: NextRequest,
@@ -8,6 +9,11 @@ export async function PATCH(
 ) {
   try {
     const { id } = await params;
+    const user = await getSessionUser(req);
+    if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
     const body = await req.json();
 
     const data: Record<string, unknown> = {};
@@ -56,11 +62,15 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params;
+    const user = await getSessionUser(req);
+    if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
 
     try {
       await prisma.service.delete({ where: { id: Number(id) } });

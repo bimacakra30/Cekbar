@@ -9,7 +9,6 @@ export async function GET(req: NextRequest) {
     const category = searchParams.get("category");
 
     const where: Prisma.ServiceWhereInput = {
-      is_active: true,
       category: { not: null },
     };
 
@@ -37,6 +36,7 @@ export async function GET(req: NextRequest) {
         custom_field_regex: true,
         custom_field_maxlen: true,
         allow_bulk: true,
+        is_active: true,
       },
       orderBy: [{ group_name: "asc" }, { service_name: "asc" }],
     });

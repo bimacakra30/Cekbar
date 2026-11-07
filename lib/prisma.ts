@@ -8,10 +8,9 @@ function createPrismaClient() {
 
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient };
 
-const prisma = globalForPrisma.prisma || createPrismaClient();
+const prisma = globalForPrisma.prisma ?? createPrismaClient();
 
-if (process.env.NODE_ENV !== "production") {
-  globalForPrisma.prisma = prisma;
-}
+// Simpan ke global di SEMUA environment untuk mencegah connection pool leak
+globalForPrisma.prisma = prisma;
 
 export default prisma;

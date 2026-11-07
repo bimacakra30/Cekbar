@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { getSessionUser } from "@/lib/session";
+import { getSessionUser, verifyCsrfOrigin } from "@/lib/session";
 import bcrypt from "bcryptjs";
 
 export async function POST(req: NextRequest) {
   const sessionUser = await getSessionUser(req);
   if (!sessionUser) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  if (!verifyCsrfOrigin(req)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const body = await req.json();
@@ -38,7 +42,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Password lama salah" }, { status: 403 });
   }
 
-  const hashedPassword = await bcrypt.hash(newPassword, 10);
+  const hashedPassword = await bcrypt.hash(newPassword, 12);
 
   await prisma.user.update({
     where: { id: sessionUser.id },

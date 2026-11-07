@@ -33,10 +33,9 @@ export async function POST(req: NextRequest) {
       create: { key_name: "maintenance_mode", value: String(enabled) },
     });
 
-    console.log(`[Settings] Maintenance mode ${enabled ? "AKTIF" : "NONAKTIF"} oleh ${user.username}`);
     return NextResponse.json({ enabled });
   } catch (error) {
-    console.error("[Settings] Gagal update maintenance mode:", error);
+    console.error("[Settings] Maintenance update error");
     return NextResponse.json({ error: "Terjadi kesalahan server" }, { status: 500 });
   }
 }

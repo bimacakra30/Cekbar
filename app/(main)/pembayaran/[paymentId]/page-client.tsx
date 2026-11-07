@@ -15,6 +15,7 @@ import {
   ExternalLink,
   Smartphone,
 } from "lucide-react";
+import Image from "next/image";
 import { CekbarIcon } from "@/components/ui/cekbar-logo";
 import { cn } from "@/lib/utils";
 import { formatRupiah, formatDate } from "@/lib/utils";
@@ -131,7 +132,6 @@ export function PaymentPageClient() {
       try {
         const data = JSON.parse(event.data);
         if (data.paid && data.status === "PAID") {
-          console.log("[SSE] Pembayaran masuk!", data.transaction);
           evtSource.close();
           sseRef.current = null;
           syncAndFetch();
@@ -141,7 +141,6 @@ export function PaymentPageClient() {
     };
 
     evtSource.onerror = function () {
-      console.log("[SSE] Koneksi terputus, fallback ke polling");
       evtSource.close();
       sseRef.current = null;
     };
@@ -152,19 +151,23 @@ export function PaymentPageClient() {
     };
   }, [payment?.qrisId, payment?.status, paymentId, syncAndFetch]);
 
+  const paymentStatus = payment?.status;
+
   useEffect(() => {
-    if (!payment || payment.status !== "MENUNGGU") return;
+    if (!paymentStatus || paymentStatus !== "MENUNGGU") return;
 
     const interval = setInterval(syncAndFetch, 5000);
     return () => clearInterval(interval);
-  }, [payment, syncAndFetch]);
+  }, [paymentStatus, syncAndFetch]);
+
+  const paymentExpiresAt = payment?.expiresAt;
 
   useEffect(() => {
-    if (!payment || payment.status !== "MENUNGGU" || !payment.expiresAt) return;
+    if (!paymentStatus || paymentStatus !== "MENUNGGU" || !paymentExpiresAt) return;
 
     const tick = () => {
       const now = Date.now();
-      const expires = new Date(payment.expiresAt!).getTime();
+      const expires = new Date(paymentExpiresAt).getTime();
       const diff = expires - now;
 
       if (diff <= 0) {
@@ -183,7 +186,7 @@ export function PaymentPageClient() {
     tick();
     const interval = setInterval(tick, 1000);
     return () => clearInterval(interval);
-  }, [payment, fetchPayment]);
+  }, [paymentStatus, paymentExpiresAt, fetchPayment]);
 
   const handleCopy = useCallback(async (text: string, field: string) => {
     await navigator.clipboard.writeText(text);
@@ -299,10 +302,13 @@ export function PaymentPageClient() {
 
             {payment.qrImage ? (
               <div className="relative p-4 bg-white rounded-2xl shadow-sm border border-gray-100 mb-4">
-                <img
+                <Image
                   src={payment.qrImage}
                   alt="Scan QRIS untuk bayar"
+                  width={256}
+                  height={256}
                   className="w-64 h-64 object-contain"
+                  unoptimized
                 />
                 <div className="absolute inset-x-4 top-4 bottom-4 overflow-hidden rounded-xl pointer-events-none">
                   <div className="h-0.5 bg-gradient-to-r from-transparent via-blue-500 to-transparent animate-qris-scan" />
@@ -406,6 +412,9 @@ export function PaymentPageClient() {
             <p className="text-sm text-muted-foreground mt-3 text-center">
               Silakan buat order baru untuk melakukan pemesanan ulang.
             </p>
+            <a href="/dashboard" className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white gradient-brand hover:opacity-90 transition-opacity mt-4">
+              Kembali ke Dashboard
+            </a>
           </div>
         )}
 

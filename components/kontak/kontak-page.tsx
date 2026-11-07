@@ -48,8 +48,8 @@ const contactInfos = [
   {
     icon: Clock,
     title: "Jam Operasional",
-    value: "Senin – Jumat",
-    desc: "08.00 – 17.00 WIB",
+    value: "Setiap Hari",
+    desc: "10.00 – 21.00 WIB",
     href: null,
     color: "from-violet-500 to-violet-700",
     glow: "shadow-violet-600/25",

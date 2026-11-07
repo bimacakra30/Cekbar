@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
     }
 
     const dbStatus = STATUS_MAP[data.status] ?? "PROCESSING";
-    const statusNote = NOTE_MAP[data.status] ?? data.status;
+    const statusNote = data.admin_note || NOTE_MAP[data.status] || data.status;
 
     let resultData = null;
     if (data.result) {

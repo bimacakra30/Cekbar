@@ -132,6 +132,7 @@ async function ceiridFetch<T>(
       ...(body ? { "Content-Type": "application/json" } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
+    signal: AbortSignal.timeout(30000),
   });
 
   const json = await res.json() as CeiridResponse<T>;
@@ -150,7 +151,7 @@ async function ceiridFetch<T>(
 
 export async function getApiInfo(): Promise<CeiridResponse> {
   const config = getConfig();
-  const res = await fetch(`${config.apiUrl}/`, { method: "GET" });
+  const res = await fetch(`${config.apiUrl}/`, { method: "GET", signal: AbortSignal.timeout(15000) });
   return res.json();
 }
 

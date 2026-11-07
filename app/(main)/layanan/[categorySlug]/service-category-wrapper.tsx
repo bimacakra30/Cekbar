@@ -13,13 +13,14 @@ type DbService = {
   category: string | null;
   sell_price: number;
   time_info: string;
-  info: string;
+  info: string | null;
   min_qty: number;
   max_qty: string;
   custom_field_name: string;
   custom_field_regex: string;
   custom_field_maxlen: string;
   allow_bulk: number;
+  is_active: boolean;
 };
 
 const CATEGORY_CONFIG: Record<string, {
@@ -68,7 +69,7 @@ function dbServiceToService(dbSvc: DbService, categorySlug: string): Service {
     description: dbSvc.service_name,
     icon: "Package",
     iconColor: "#3B82F6",
-    isOnline: true,
+    isOnline: dbSvc.is_active,
     pricePerUnit: dbSvc.sell_price,
     requiresAgreement: config?.requiresAgreement ?? false,
     processTime: dbSvc.time_info || undefined,
@@ -83,16 +84,22 @@ function dbServiceToService(dbSvc: DbService, categorySlug: string): Service {
 
 type Props = {
   categorySlug: string;
+  initialServices?: DbService[];
 };
 
-export function ServiceCategoryWrapper({ categorySlug }: Props) {
-  const [services, setServices] = useState<Service[]>([]);
-  const [loading, setLoading] = useState(true);
+export function ServiceCategoryWrapper({ categorySlug, initialServices }: Props) {
+  const hasInitial = initialServices && initialServices.length > 0;
+  const [services, setServices] = useState<Service[]>(
+    hasInitial ? initialServices.map((svc) => dbServiceToService(svc, categorySlug)) : []
+  );
+  const [loading, setLoading] = useState(!hasInitial);
   const [notFound, setNotFound] = useState(false);
 
   const config = CATEGORY_CONFIG[categorySlug];
 
   useEffect(() => {
+    if (hasInitial) return;
+
     async function fetchData() {
       try {
         const res = await fetch(`/api/services?category=${categorySlug}`);
@@ -119,7 +126,7 @@ export function ServiceCategoryWrapper({ categorySlug }: Props) {
       setNotFound(true);
       setLoading(false);
     }
-  }, [categorySlug, config]);
+  }, [categorySlug, config, hasInitial]);
 
   if (loading) {
     return (

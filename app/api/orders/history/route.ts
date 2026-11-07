@@ -83,8 +83,9 @@ export async function GET(req: NextRequest) {
          o.order_id, o.service_id, o.service_name, o.imei_list,
          o.total_price, o.status, o.dhru_order_id, o.ceir_order_id,
          o.roamer_months, o.status_note, o.unit_price,
+         o.admin_note, o.is_manual_order,
          o.created_at, o.updated_at, o.completed_at,
-         o.results,
+         o.results, o.is_direct_order,
          p.payment_id, p.payment_type, p.status AS payment_status, p.confirmed_at
        FROM orders o
        LEFT JOIN payments p ON p.order_id = o.order_id
@@ -131,6 +132,9 @@ export async function GET(req: NextRequest) {
         createdAt:     row.created_at,
         updatedAt:     row.updated_at,
         results,
+        isDirectOrder: !!row.is_direct_order,
+        adminNote:     row.admin_note ?? null,
+        isManualOrder: !!row.is_manual_order,
       };
     });
 

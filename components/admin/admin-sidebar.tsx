@@ -1,12 +1,15 @@
 "use client";
 
-import { usePathname } from "next/navigation";
+import { useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
-import { X } from "lucide-react";
+import { X, User, LogOut } from "lucide-react";
 import { CekbarLogo } from "@/components/ui/cekbar-logo";
 import { cn } from "@/lib/utils";
 import { adminNavigation } from "@/lib/admin-navigation";
 import { DynamicIcon } from "@/components/ui/dynamic-icon";
+import { useAuth } from "@/hooks/use-auth";
+import { LogoutModal, useLogoutModal } from "@/components/ui/logout-modal";
 
 type AdminSidebarProps = {
   isOpen: boolean;
@@ -17,6 +20,19 @@ type AdminSidebarProps = {
 
 export function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
   const pathname = usePathname();
+  const router = useRouter();
+  const { user } = useAuth();
+
+  const initials = user?.username?.slice(0, 2).toUpperCase() ?? "??";
+  const isSuperadmin = user?.role === "superadmin";
+  const logoutModal = useLogoutModal();
+  const [loggingOut, setLoggingOut] = useState(false);
+
+  async function handleLogout() {
+    setLoggingOut(true);
+    await fetch("/api/auth/logout", { method: "POST" });
+    router.push("/login");
+  }
 
   return (
     <>
@@ -103,13 +119,66 @@ export function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
           ))}
         </nav>
 
-        <div className="px-5 py-4 shrink-0">
-          <div className="h-px bg-border/40 mb-3" />
+        <div className="px-3 shrink-0">
+          <div className="h-px bg-border/40 mb-1" />
+          {user && (
+            <div className="flex items-center gap-3 px-3 py-2.5 mb-1">
+              <div className={cn(
+                "w-8 h-8 rounded-xl flex items-center justify-center shrink-0 text-white text-[11px] font-bold shadow-sm",
+                isSuperadmin
+                  ? "bg-gradient-to-br from-amber-500 to-orange-600"
+                  : "bg-gradient-to-br from-blue-500 to-indigo-600"
+              )}>
+                <span suppressHydrationWarning>{initials}</span>
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-[13px] font-semibold text-foreground truncate" suppressHydrationWarning>
+                  {user.username}
+                </p>
+                <p className={cn(
+                  "text-[10px] font-semibold truncate",
+                  isSuperadmin ? "text-amber-500" : "text-blue-500"
+                )} suppressHydrationWarning>
+                  {isSuperadmin ? "Superadmin" : "Admin"}
+                </p>
+              </div>
+            </div>
+          )}
+          <Link
+            href="/profil"
+            onClick={onClose}
+            className={cn(
+              "flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-medium transition-all duration-200",
+              pathname === "/profil"
+                ? "text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-500/10"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+            )}
+          >
+            <User size={16} className="shrink-0" />
+            Profil Saya
+          </Link>
+          <button
+            onClick={logoutModal.show}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-all duration-200"
+          >
+            <LogOut size={16} className="shrink-0" />
+            Keluar
+          </button>
+        </div>
+
+        <div className="px-5 py-3 shrink-0">
           <p className="text-[10px] text-muted-foreground/40 font-medium">
             © 2026 Cekbar
           </p>
         </div>
       </aside>
+
+      <LogoutModal
+        open={logoutModal.open}
+        onCancel={logoutModal.hide}
+        onConfirm={handleLogout}
+        loading={loggingOut}
+      />
     </>
   );
 }

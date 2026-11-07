@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { Mail, Loader2, CheckCircle2, AlertCircle, ArrowLeft } from "lucide-react";
 import Link from "next/link";
-import { cn } from "@/lib/utils";
 
 export function ForgotPasswordClient() {
   const [email, setEmail] = useState("");

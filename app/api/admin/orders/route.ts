@@ -32,6 +32,7 @@ export async function GET(req: NextRequest) {
       `SELECT 
         o.order_id, o.service_name, o.imei_list, o.total_price, o.status AS order_status,
         o.ceir_order_id, o.status_note, o.roamer_months, o.results,
+        o.admin_note, o.is_manual_order,
         o.created_at, o.updated_at, o.completed_at,
         u.username, u.email, u.nama,
         p.payment_id, p.total_amount, p.status AS payment_status,

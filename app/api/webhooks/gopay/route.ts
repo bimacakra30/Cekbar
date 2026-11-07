@@ -1,4 +1,3 @@
-
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { verifyWebhookSignature } from "@/lib/gopay";
@@ -56,9 +55,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ received: true, message: "Already processed" });
     }
 
-    console.log(`[GoPay Webhook] Payment ${payment.payment_id} LUNAS via QRIS`);
-
-    await prisma.payment.updateMany({
+    // Use updateMany with WHERE status = 'MENUNGGU' as an atomic lock.
+    // If another webhook already changed the status, affectedRows will be 0.
+    const updateResult = await prisma.payment.updateMany({
       where: { payment_id: payment.payment_id, status: "MENUNGGU" },
       data: {
         status: "LUNAS",
@@ -68,6 +67,14 @@ export async function POST(req: NextRequest) {
         payment_type: transaction?.payment_type ?? "QRIS",
       },
     });
+
+    // If no rows were affected, another concurrent webhook already processed this payment
+    if (updateResult.count === 0) {
+      console.log(`[GoPay Webhook] Payment ${payment.payment_id} already processed by another request, skip.`);
+      return NextResponse.json({ received: true, message: "Already processed" });
+    }
+
+    console.log(`[GoPay Webhook] Payment ${payment.payment_id} LUNAS via QRIS`);
 
     await prisma.order.updateMany({
       where: { order_id: payment.order_id, status: "PENDING_PAYMENT" },

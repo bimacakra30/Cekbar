@@ -2,11 +2,9 @@
 
 import { formatRupiah } from "@/lib/utils";
 import { useState, useEffect, useCallback } from "react";
-import { createPortal } from "react-dom";
 import {
   Search,
   RefreshCw,
-  MoreVertical,
   X,
   Check,
   Loader2,
@@ -16,13 +14,12 @@ import {
   CheckSquare,
   Square,
   Minus,
-  ToggleRight as EnableIcon,
-  ToggleLeft as DisableIcon,
   Trash2,
-  AlertTriangle,
   Plus,
   Pencil,
 } from "lucide-react";
+import { DeleteConfirmModal } from "./delete-confirm-modal";
+import { ServiceFormDrawer } from "./service-form-drawer";
 
 interface ServiceRow {
   id: number;
@@ -65,7 +62,6 @@ export default function AdminLayananPage() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<string | null>(null);
-  const [actionMenuId, setActionMenuId] = useState<number | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editSellPrice, setEditSellPrice] = useState("");
   const [savingId, setSavingId] = useState<number | null>(null);
@@ -100,7 +96,6 @@ export default function AdminLayananPage() {
         if (data.groups?.length > 0) setGroups(data.groups);
       }
     } catch {
-      console.error("Gagal fetch services");
     } finally {
       setLoading(false);
       setSelectedIds(new Set());
@@ -206,10 +201,8 @@ export default function AdminLayananPage() {
         );
       }
     } catch {
-      console.error("Gagal toggle status");
     } finally {
       setSavingId(null);
-      setActionMenuId(null);
     }
   }
 
@@ -233,7 +226,6 @@ export default function AdminLayananPage() {
         setEditingId(null);
       }
     } catch {
-      console.error("Gagal update harga");
     } finally {
       setSavingId(null);
     }
@@ -586,13 +578,14 @@ export default function AdminLayananPage() {
       <div className="bg-card rounded-xl border border-border overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
+            <caption className="sr-only">Daftar layanan</caption>
             <thead>
               <tr className="border-b border-border bg-muted/30">
                 <th className="px-4 py-3 w-10">
                   <button
                     onClick={toggleSelectAll}
                     disabled={loading || services.length === 0}
-                    className="flex items-center justify-center text-muted-foreground hover:text-brand-primary transition-colors disabled:opacity-40"
+                    className="flex items-center justify-center text-muted-foreground hover:text-brand-primary transition-colors disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-brand-primary/50 focus-visible:ring-offset-1 rounded"
                     title={allSelected ? "Batal pilih semua" : "Pilih semua"}
                   >
                     {allSelected ? (
@@ -651,7 +644,7 @@ export default function AdminLayananPage() {
                       <td className="px-4 py-3.5">
                         <button
                           onClick={() => toggleSelectOne(service.id)}
-                          className="flex items-center justify-center text-muted-foreground hover:text-brand-primary transition-colors"
+                          className="flex items-center justify-center text-muted-foreground hover:text-brand-primary transition-colors focus-visible:ring-2 focus-visible:ring-brand-primary/50 focus-visible:ring-offset-1 rounded"
                         >
                           {isSelected ? (
                             <CheckSquare size={16} className="text-brand-primary" />
@@ -752,63 +745,43 @@ export default function AdminLayananPage() {
                         )}
                       </td>
                       <td className="px-5 py-3.5 text-center">
-                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ${service.is_active ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "bg-red-500/10 text-red-600 dark:text-red-400"}`}>
-                          <span className={`w-1.5 h-1.5 rounded-full ${service.is_active ? "bg-emerald-500" : "bg-red-500"}`} />
-                          {service.is_active ? "Aktif" : "Nonaktif"}
-                        </span>
+                        <button
+                          onClick={() => toggleActive(service)}
+                          disabled={savingId === service.id}
+                          className="inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50 group focus-visible:ring-2 focus-visible:ring-brand-primary/50 focus-visible:ring-offset-1 rounded"
+                          title={service.is_active ? "Klik untuk nonaktifkan" : "Klik untuk aktifkan"}
+                          role="switch"
+                          aria-checked={!!service.is_active}
+                          aria-label="Toggle status aktif"
+                        >
+                          {savingId === service.id ? (
+                            <Loader2 size={14} className="animate-spin text-muted-foreground" />
+                          ) : service.is_active ? (
+                            <ToggleRight size={18} className="text-emerald-500 group-hover:text-emerald-600 transition-colors" />
+                          ) : (
+                            <ToggleLeft size={18} className="text-red-400 group-hover:text-red-500 transition-colors" />
+                          )}
+                          <span className={`text-[11px] font-semibold ${service.is_active ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
+                            {service.is_active ? "Aktif" : "Nonaktif"}
+                          </span>
+                        </button>
                       </td>
                       <td className="px-5 py-3.5 text-center">
-                        <div className="relative inline-block">
+                        <div className="inline-flex items-center gap-1">
                           <button
-                            onClick={() => setActionMenuId(actionMenuId === service.id ? null : service.id)}
-                            className="p-1.5 rounded-lg hover:bg-muted transition-colors"
+                            onClick={() => openEditDrawer(service)}
+                            className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-brand-primary transition-colors"
+                            title="Edit Layanan"
                           >
-                            <MoreVertical size={15} className="text-muted-foreground" />
+                            <Pencil size={14} />
                           </button>
-                          {actionMenuId === service.id && (
-                            <div className="absolute right-0 top-full mt-1 w-44 bg-card border border-border rounded-lg shadow-lg py-1 z-10 animate-fade-in">
-                              <button
-                                onClick={() => {
-                                  setEditingId(service.id);
-                                  setEditSellPrice(String(service.sell_price));
-                                  setActionMenuId(null);
-                                }}
-                                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-muted transition-colors"
-                              >
-                                <RefreshCw size={14} />
-                                Set Harga Jual
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setActionMenuId(null);
-                                  openEditDrawer(service);
-                                }}
-                                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-muted transition-colors"
-                              >
-                                <Pencil size={14} />
-                                Edit Layanan
-                              </button>
-                              <button
-                                onClick={() => toggleActive(service)}
-                                disabled={savingId === service.id}
-                                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-muted transition-colors"
-                              >
-                                {service.is_active ? <ToggleLeft size={14} /> : <ToggleRight size={14} />}
-                                {service.is_active ? "Nonaktifkan" : "Aktifkan"}
-                              </button>
-                              <div className="my-1 border-t border-border" />
-                              <button
-                                onClick={() => {
-                                  setActionMenuId(null);
-                                  setConfirmDelete({ type: "single", service });
-                                }}
-                                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-500 hover:bg-red-500/10 transition-colors"
-                              >
-                                <Trash2 size={14} />
-                                Hapus Layanan
-                              </button>
-                            </div>
-                          )}
+                          <button
+                            onClick={() => setConfirmDelete({ type: "single", service })}
+                            className="p-1.5 rounded-lg hover:bg-red-500/10 text-muted-foreground hover:text-red-500 transition-colors"
+                            title="Hapus Layanan"
+                          >
+                            <Trash2 size={14} />
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -820,262 +793,35 @@ export default function AdminLayananPage() {
         </div>
       </div>
 
-      {confirmDelete && typeof window !== "undefined" && createPortal(
-        <div
-          className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
-          onClick={(e) => { if (e.target === e.currentTarget && !deleting) setConfirmDelete(null); }}
-        >
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-          <div className="relative w-full max-w-md bg-card border border-border rounded-2xl shadow-2xl p-6 animate-fade-in">
-            <div className="flex items-center justify-center w-14 h-14 rounded-full bg-red-500/10 border border-red-500/20 mx-auto mb-4">
-              <AlertTriangle size={28} className="text-red-500" />
-            </div>
-            <h3 className="text-center text-lg font-bold text-foreground mb-1">Hapus Layanan?</h3>
-            <p className="text-center text-sm text-muted-foreground mb-5">
-              {confirmDelete.type === "single" ? (
-                <>Layanan <span className="font-semibold text-foreground">&quot;{confirmDelete.service.service_name}&quot;</span> akan dihapus permanen dan tidak dapat dikembalikan.</>
-              ) : (
-                <><span className="font-semibold text-foreground">{selectedIds.size} layanan</span> yang dipilih akan dihapus permanen dan tidak dapat dikembalikan.</>
-              )}
-            </p>
-            <div className="flex items-center gap-3">
-              <button onClick={() => !deleting && setConfirmDelete(null)} disabled={deleting}
-                className="flex-1 px-4 py-2.5 text-sm font-medium border border-border rounded-xl hover:bg-muted transition-colors disabled:opacity-50">
-                Batal
-              </button>
-              <button
-                onClick={() => confirmDelete.type === "single" ? deleteService(confirmDelete.service) : batchDeleteServices()}
-                disabled={deleting}
-                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold text-white bg-red-500 hover:bg-red-600 rounded-xl transition-colors disabled:opacity-60"
-              >
-                {deleting ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}
-                {deleting ? "Menghapus..." : "Ya, Hapus"}
-              </button>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
+      <DeleteConfirmModal
+        isOpen={!!confirmDelete}
+        onClose={() => setConfirmDelete(null)}
+        onConfirm={() => confirmDelete?.type === "single" ? deleteService(confirmDelete.service) : batchDeleteServices()}
+        deleting={deleting}
+        message={
+          confirmDelete?.type === "single" ? (
+            <>Layanan <span className="font-semibold text-foreground">&quot;{confirmDelete.service.service_name}&quot;</span> akan dihapus permanen dan tidak dapat dikembalikan.</>
+          ) : (
+            <><span className="font-semibold text-foreground">{selectedIds.size} layanan</span> yang dipilih akan dihapus permanen dan tidak dapat dikembalikan.</>
+          )
+        }
+      />
 
-      {drawerMode && typeof window !== "undefined" && createPortal(
-        <div className="fixed inset-0 z-[9998] flex">
-          <div
-            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-            onClick={() => !formSaving && closeDrawer()}
-          />
-          <div className="relative ml-auto h-full w-full max-w-lg bg-card border-l border-border shadow-2xl flex flex-col animate-slide-in-right overflow-hidden">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
-              <div>
-                <h2 className="text-base font-bold text-foreground">
-                  {drawerMode === "add" ? "Tambah Layanan" : "Edit Layanan"}
-                </h2>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  {drawerMode === "add" ? "Tambah layanan secara manual" : `ID: ${drawerService?.service_id}`}
-                </p>
-              </div>
-              <button onClick={() => !formSaving && closeDrawer()} className="p-2 rounded-lg hover:bg-muted transition-colors">
-                <X size={18} className="text-muted-foreground" />
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
-
-              {formError && (
-                <div className="flex items-center gap-2 px-4 py-3 bg-red-500/10 border border-red-500/30 text-red-600 dark:text-red-400 rounded-lg text-sm">
-                  <AlertTriangle size={15} className="shrink-0" />
-                  {formError}
-                </div>
-              )}
-
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                    Service ID / Endpoint
-                  </label>
-                  {drawerMode === "edit" && (
-                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground font-mono">
-                      read-only
-                    </span>
-                  )}
-                </div>
-                {drawerMode === "add" ? (
-                  <>
-                    <input
-                      type="text"
-                      value={form.service_id}
-                      onChange={e => setField("service_id", e.target.value)}
-                      placeholder="Kosongkan untuk auto-generate..."
-                      className="w-full px-3 py-2.5 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary font-mono transition-colors"
-                    />
-                    <p className="text-[11px] text-muted-foreground mt-1">
-                      ID unik layanan ini dalam sistem. Jika kosong, akan digenerate otomatis.
-                    </p>
-                  </>
-                ) : (
-                  <div className="px-3 py-2.5 text-sm bg-muted/40 border border-border rounded-lg font-mono text-foreground select-all cursor-text">
-                    {form.service_id}
-                  </div>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Nama Layanan *</label>
-                <input
-                  type="text"
-                  value={form.service_name}
-                  onChange={e => setField("service_name", e.target.value)}
-                  placeholder="Cek IMEI Bea Cukai..."
-                  className="w-full px-3 py-2.5 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary transition-colors"
-                />
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Grup *</label>
-                  <button
-                    type="button"
-                    onClick={() => setGroupInputMode(m => m === "select" ? "custom" : "select")}
-                    className="text-[11px] text-brand-primary hover:underline"
-                  >
-                    {groupInputMode === "select" ? "+ Grup baru" : "Pilih dari daftar"}
-                  </button>
-                </div>
-                {groupInputMode === "select" && groups.length > 0 ? (
-                  <select
-                    value={form.group_name}
-                    onChange={e => setField("group_name", e.target.value)}
-                    className="w-full px-3 py-2.5 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary transition-colors"
-                  >
-                    <option value="">— Pilih Grup —</option>
-                    {groups.map(g => <option key={g} value={g}>{g}</option>)}
-                  </select>
-                ) : (
-                  <input
-                    type="text"
-                    value={form.group_name}
-                    onChange={e => setField("group_name", e.target.value)}
-                    placeholder="Nama grup layanan..."
-                    className="w-full px-3 py-2.5 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary transition-colors"
-                  />
-                )}
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Kategori</label>
-                <select
-                  value={form.category}
-                  onChange={e => setField("category", e.target.value)}
-                  className="w-full px-3 py-2.5 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary transition-colors"
-                >
-                  <option value="">— Tidak ada —</option>
-                  {CATEGORY_OPTIONS.filter(o => o.value !== null).map(o => (
-                    <option key={o.value!} value={o.value!}>{o.label}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="border-t border-border" />
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Harga Beli (Rp)</label>
-                  <input
-                    type="number"
-                    min="0"
-                    value={form.buy_price}
-                    onChange={e => setField("buy_price", e.target.value)}
-                    placeholder="0"
-                    className="w-full px-3 py-2.5 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary transition-colors"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Harga Jual (Rp)</label>
-                  <input
-                    type="number"
-                    min="0"
-                    value={form.sell_price}
-                    onChange={e => setField("sell_price", e.target.value)}
-                    placeholder="0"
-                    className="w-full px-3 py-2.5 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary transition-colors"
-                  />
-                </div>
-              </div>
-              {Number(form.buy_price) > 0 && Number(form.sell_price) > 0 && (
-                <div className={`text-xs font-medium px-3 py-2 rounded-lg ${
-                  Number(form.sell_price) >= Number(form.buy_price)
-                    ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                    : "bg-red-500/10 text-red-500"
-                }`}>
-                  Margin: {Number(form.sell_price) >= Number(form.buy_price) ? "+" : ""}
-                  {formatRupiah(Number(form.sell_price) - Number(form.buy_price))}
-                  {" "}({Number(form.buy_price) > 0 ? (((Number(form.sell_price) - Number(form.buy_price)) / Number(form.buy_price)) * 100).toFixed(0) : 0}%)
-                </div>
-              )}
-
-              <div className="border-t border-border" />
-
-              <div>
-                <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Estimasi Waktu</label>
-                <input
-                  type="text"
-                  value={form.time_info}
-                  onChange={e => setField("time_info", e.target.value)}
-                  placeholder="Contoh: 1-24 jam, Instan..."
-                  className="w-full px-3 py-2.5 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary transition-colors"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Deskripsi / Info</label>
-                <textarea
-                  value={form.info}
-                  onChange={e => setField("info", e.target.value)}
-                  placeholder="Deskripsi layanan, catatan, dll..."
-                  rows={3}
-                  className="w-full px-3 py-2.5 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary transition-colors resize-none"
-                />
-              </div>
-
-              <div className="flex items-center justify-between py-3 px-4 bg-muted/30 rounded-xl">
-                <div>
-                  <p className="text-sm font-medium text-foreground">Status Aktif</p>
-                  <p className="text-xs text-muted-foreground">Layanan akan tampil untuk pelanggan</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setField("is_active", !form.is_active)}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                    form.is_active ? "bg-emerald-500" : "bg-border"
-                  }`}
-                >
-                  <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${
-                    form.is_active ? "translate-x-6" : "translate-x-1"
-                  }`} />
-                </button>
-              </div>
-
-            </div>{}
-
-            <div className="px-6 py-4 border-t border-border shrink-0 flex items-center gap-3">
-              <button
-                onClick={() => !formSaving && closeDrawer()}
-                disabled={formSaving}
-                className="flex-1 px-4 py-2.5 text-sm font-medium border border-border rounded-xl hover:bg-muted transition-colors disabled:opacity-50"
-              >
-                Batal
-              </button>
-              <button
-                onClick={drawerMode === "add" ? createService : updateService}
-                disabled={formSaving}
-                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold text-white gradient-brand rounded-xl transition-opacity disabled:opacity-60"
-              >
-                {formSaving ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />}
-                {formSaving ? "Menyimpan..." : drawerMode === "add" ? "Tambah Layanan" : "Simpan Perubahan"}
-              </button>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
+      <ServiceFormDrawer
+        isOpen={!!drawerMode}
+        onClose={closeDrawer}
+        mode={drawerMode ?? "add"}
+        form={form}
+        setField={setField}
+        onSubmit={drawerMode === "add" ? createService : updateService}
+        saving={formSaving}
+        formError={formError}
+        groups={groups}
+        groupInputMode={groupInputMode}
+        setGroupInputMode={setGroupInputMode}
+        categoryOptions={CATEGORY_OPTIONS}
+        drawerServiceId={drawerService?.service_id}
+      />
     </div>
   );
 }

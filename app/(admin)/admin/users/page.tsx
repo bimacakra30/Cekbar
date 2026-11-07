@@ -17,7 +17,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 
-type UserRole = "superadmin" | "admin" | "user";
+type UserRole = "superadmin" | "admin" | "reseller" | "user";
 
 type AppUser = {
   id: number;
@@ -33,6 +33,7 @@ type AppUser = {
 const roleBadgeConfig: Record<UserRole, { label: string; color: string; icon: typeof Shield }> = {
   superadmin: { label: "Superadmin", color: "bg-amber-500/10 text-amber-600 dark:text-amber-400", icon: ShieldCheck },
   admin: { label: "Admin", color: "bg-blue-500/10 text-blue-600 dark:text-blue-400", icon: Shield },
+  reseller: { label: "Reseller", color: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400", icon: Shield },
   user: { label: "User", color: "bg-slate-500/10 text-slate-600 dark:text-slate-400", icon: User },
 };
 
@@ -50,8 +51,20 @@ export default function AdminUsersPage() {
   const [callerRole, setCallerRole] = useState<UserRole>("admin");
 
   useEffect(() => {
+    if (!actionMenuId) return;
+    const handler = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest("[data-action-menu]")) {
+        setActionMenuId(null);
+      }
+    };
+    document.addEventListener("click", handler);
+    return () => document.removeEventListener("click", handler);
+  }, [actionMenuId]);
+
+  useEffect(() => {
     fetch("/api/auth/me").then(r => r.json()).then(d => {
-      if (d.role) setCallerRole(d.role as UserRole);
+      if (d.user?.role) setCallerRole(d.user.role as UserRole);
     }).catch(() => {});
   }, []);
 
@@ -240,6 +253,7 @@ export default function AdminUsersPage() {
             <option value="ALL">Semua Role</option>
             <option value="superadmin">Superadmin</option>
             <option value="admin">Admin</option>
+            <option value="reseller">Reseller</option>
             <option value="user">User</option>
           </select>
         </div>
@@ -288,7 +302,7 @@ export default function AdminUsersPage() {
                 </tr>
               ) : (
                 users.map((user) => {
-                  const role = roleBadgeConfig[user.role];
+                  const role = roleBadgeConfig[user.role] ?? roleBadgeConfig.user;
                   const RoleIcon = role.icon;
 
                   return (
@@ -333,7 +347,7 @@ export default function AdminUsersPage() {
                         </span>
                       </td>
                       <td className="px-5 py-3.5 text-center">
-                        <div className="relative inline-block">
+                        <div className="relative inline-block" data-action-menu>
                           <button
                             onClick={() => setActionMenuId(actionMenuId === user.id ? null : user.id)}
                             className="p-1.5 rounded-lg hover:bg-muted transition-colors"
@@ -465,6 +479,7 @@ export default function AdminUsersPage() {
                     disabled={!isSuperadmin}
                   >
                     {isSuperadmin && <option value="admin">Admin</option>}
+                    {isSuperadmin && <option value="reseller">Reseller</option>}
                     <option value="user">User</option>
                   </select>
                   {!isSuperadmin && (

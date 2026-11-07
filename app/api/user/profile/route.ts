@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { getSessionUser } from "@/lib/session";
+import { getSessionUser, verifyCsrfOrigin } from "@/lib/session";
 
 export async function GET(req: NextRequest) {
   const sessionUser = await getSessionUser(req);
@@ -35,6 +35,10 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  if (!verifyCsrfOrigin(req)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const body = await req.json();
   const { nama, email, no_hp } = body;
 
@@ -46,8 +50,22 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ error: "Format email tidak valid" }, { status: 400 });
   }
 
-  if (!/^[\d+]{8,20}$/.test(no_hp)) {
-    return NextResponse.json({ error: "Format nomor HP tidak valid" }, { status: 400 });
+  const phoneDigits = no_hp.replace(/[\s\-()]/g, "");
+  const phoneRegex = /^(\+62|62|0)[0-9]{8,13}$/;
+  if (!phoneRegex.test(phoneDigits)) {
+    return NextResponse.json({ error: "Format nomor HP tidak valid (contoh: 081234567890)" }, { status: 400 });
+  }
+
+  const currentUser = await prisma.user.findUnique({
+    where: { id: sessionUser.id },
+    select: { email: true },
+  });
+
+  if (currentUser && email.toLowerCase() !== currentUser.email.toLowerCase()) {
+    return NextResponse.json(
+      { error: "Perubahan email tidak diizinkan. Hubungi admin untuk mengubah email." },
+      { status: 400 }
+    );
   }
 
   const existingEmail = await prisma.user.findFirst({
@@ -58,7 +76,7 @@ export async function PUT(req: NextRequest) {
   }
 
   const existingPhone = await prisma.user.findFirst({
-    where: { no_hp, id: { not: sessionUser.id } },
+    where: { no_hp: phoneDigits, id: { not: sessionUser.id } },
   });
   if (existingPhone) {
     return NextResponse.json({ error: "Nomor HP sudah digunakan akun lain" }, { status: 409 });
@@ -66,7 +84,7 @@ export async function PUT(req: NextRequest) {
 
   const updated = await prisma.user.update({
     where: { id: sessionUser.id },
-    data: { nama, email, no_hp },
+    data: { nama, email, no_hp: phoneDigits },
     select: {
       id: true,
       nama: true,

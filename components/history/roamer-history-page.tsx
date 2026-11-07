@@ -1,15 +1,16 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import { useSearchParams } from "next/navigation";
 import {
   Search, ChevronLeft, ChevronRight, Loader2, ExternalLink,
-  ChevronDown, ChevronUp, Eye, Clock, CheckCircle2, XCircle,
-  AlertCircle, Timer, CreditCard, Copy, Check,
+  ChevronDown, ChevronUp, Eye, Clock,
+  AlertCircle, Copy, Check, CreditCard,
 } from "lucide-react";
 import { formatRupiah, formatDate } from "@/lib/utils";
 import { cn } from "@/lib/utils";
+import { statusConfig } from "@/lib/status-config";
+import { useOrderHistory } from "@/hooks/use-order-history";
 import Link from "next/link";
 
 type OrderResult = {
@@ -37,23 +38,11 @@ type HistoryOrder = {
   createdAt: string;
   updatedAt: string;
   results: OrderResult[] | null;
+  statusNote: string | null;
+  adminNote?: string | null;
+  isManualOrder?: boolean;
 };
 
-type Pagination = {
-  total: number;
-  page: number;
-  limit: number;
-  totalPages: number;
-};
-
-const statusConfig: Record<string, { label: string; color: string; dot: string; icon: React.ElementType }> = {
-  SUCCESS: { label: "Selesai", color: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20", dot: "bg-emerald-500", icon: CheckCircle2 },
-  PROCESSING: { label: "Diproses", color: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20", dot: "bg-blue-500", icon: Timer },
-  PENDING: { label: "Pending", color: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20", dot: "bg-amber-500", icon: Clock },
-  PENDING_PAYMENT: { label: "Belum Bayar", color: "bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-500/20", dot: "bg-orange-500", icon: CreditCard },
-  FAILED: { label: "Gagal", color: "bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20", dot: "bg-red-500", icon: XCircle },
-  EXPIRED: { label: "Kadaluarsa", color: "bg-gray-500/10 text-gray-500 border border-gray-500/20", dot: "bg-gray-400", icon: AlertCircle },
-};
 
 function calcDuration(startIso: string, endIso: string | null): string {
   if (!endIso) return "—";
@@ -99,6 +88,12 @@ function DetailModal({ order, onClose }: { order: HistoryOrder; onClose: () => v
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
+    const handleEsc = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", handleEsc);
+    return () => document.removeEventListener("keydown", handleEsc);
+  }, [onClose]);
+
+  useEffect(() => {
     if (!isPolling) return;
     const poll = async () => {
       try {
@@ -123,7 +118,7 @@ function DetailModal({ order, onClose }: { order: HistoryOrder; onClose: () => v
   const StatusIcon = sc.icon;
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-start justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto" onClick={onClose}>
+    <div className="fixed inset-0 z-[9999] flex items-start justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto" role="dialog" aria-modal="true" onClick={onClose}>
       <div
         className="bg-card border border-border rounded-2xl shadow-2xl w-full max-w-2xl my-8 animate-fade-in overflow-hidden"
         onClick={(e) => e.stopPropagation()}
@@ -134,7 +129,7 @@ function DetailModal({ order, onClose }: { order: HistoryOrder; onClose: () => v
               <h3 className="text-base font-semibold text-foreground">Detail Pesanan</h3>
               <p className="text-xs text-muted-foreground mt-0.5 font-mono">{currentOrder.orderId}</p>
             </div>
-            <span className={cn("inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold", sc.color)}>
+            <span className={cn("inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold", sc.pill)}>
               <StatusIcon size={13} />
               {sc.label}
               {isPolling && <Loader2 size={11} className="animate-spin ml-1" />}
@@ -160,6 +155,38 @@ function DetailModal({ order, onClose }: { order: HistoryOrder; onClose: () => v
             />
             <InfoCell label="Total Biaya" value={formatRupiah(currentOrder.totalPrice)} />
           </div>
+
+          {currentOrder.statusNote && (
+            <div className="flex gap-3 p-3.5 bg-amber-500/5 border border-amber-500/15 rounded-lg">
+              <AlertCircle size={16} className="text-amber-500 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60 mb-0.5">Catatan</p>
+                <p className="text-sm text-foreground leading-relaxed">{currentOrder.statusNote}</p>
+              </div>
+            </div>
+          )}
+
+          {currentOrder.adminNote && (
+            <div className="flex gap-3 p-3.5 bg-blue-500/5 border border-blue-500/15 rounded-lg">
+              <AlertCircle size={16} className="text-blue-500 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60 mb-0.5">Catatan Admin</p>
+                <p className="text-sm text-foreground leading-relaxed">{currentOrder.adminNote}</p>
+              </div>
+            </div>
+          )}
+
+          {currentOrder.isManualOrder && (currentOrder.status === "PENDING" || currentOrder.status === "PROCESSING") && (
+            <div className="flex gap-3 p-3.5 bg-muted/50 border border-border rounded-lg">
+              <Clock size={16} className="text-muted-foreground shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium text-foreground">
+                  {currentOrder.status === "PENDING" ? "Menunggu admin memproses" : "Sedang diproses oleh admin"}
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">Estimasi 1-24 jam (jam kerja 10.00 - 21.00 WIB)</p>
+              </div>
+            </div>
+          )}
 
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
@@ -252,51 +279,14 @@ type RoamerHistoryPageProps = {
 };
 
 export function RoamerHistoryPage({ category, title, subtitle, emptyMessage }: RoamerHistoryPageProps) {
-  const [orders, setOrders] = useState<HistoryOrder[]>([]);
-  const [pagination, setPagination] = useState<Pagination>({ total: 0, page: 1, limit: 20, totalPages: 1 });
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
-  const [page, setPage] = useState(1);
-  const [selectedOrder, setSelectedOrder] = useState<HistoryOrder | null>(null);
+  const {
+    orders, pagination, loading, search, setSearch,
+    statusFilter, setStatusFilter, page, setPage,
+    selectedOrder, setSelectedOrder, handleCloseDetail, allStatuses,
+  } = useOrderHistory<HistoryOrder>({ category });
+
   const [mounted, setMounted] = useState(false);
-
   useEffect(() => { setMounted(true); }, []);
-
-  const fetchOrders = useCallback(async () => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams({
-        category,
-        page: page.toString(),
-        limit: "20",
-      });
-      if (search) params.set("search", search);
-      if (statusFilter) params.set("status", statusFilter);
-
-      const res = await fetch(`/api/orders/history?${params}`, { cache: "no-store" });
-      if (res.ok) {
-        const data = await res.json();
-        setOrders(data.orders ?? []);
-        setPagination(data.pagination ?? { total: 0, page: 1, limit: 20, totalPages: 1 });
-      }
-    } catch { console.error("Gagal fetch riwayat"); }
-    finally { setLoading(false); }
-  }, [category, page, search, statusFilter]);
-
-  useEffect(() => { fetchOrders(); }, [fetchOrders]);
-  useEffect(() => { setPage(1); }, [search, statusFilter]);
-
-  const searchParams = useSearchParams();
-  useEffect(() => {
-    const openId = searchParams.get("open");
-    if (openId && orders.length > 0 && !selectedOrder) {
-      const found = orders.find(o => o.orderId === openId);
-      if (found) setSelectedOrder(found);
-    }
-  }, [searchParams, orders, selectedOrder]);
-
-  const allStatuses = ["SUCCESS", "PROCESSING", "PENDING", "PENDING_PAYMENT", "FAILED", "EXPIRED"];
 
   return (
     <div className="space-y-4 animate-fade-in">
@@ -337,6 +327,7 @@ export function RoamerHistoryPage({ category, title, subtitle, emptyMessage }: R
 
         <div className="overflow-x-auto">
           <table className="w-full min-w-[900px]">
+            <caption className="sr-only">Riwayat pesanan roamer</caption>
             <thead>
               <tr className="border-b border-border bg-muted/30">
                 <th className="text-left text-[12px] font-bold uppercase tracking-wider text-muted-foreground px-4 py-3">Order ID</th>
@@ -351,14 +342,14 @@ export function RoamerHistoryPage({ category, title, subtitle, emptyMessage }: R
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={9} className="py-16 text-center">
+                  <td colSpan={7} className="py-16 text-center">
                     <Loader2 size={24} className="animate-spin mx-auto text-muted-foreground mb-2" />
                     <p className="text-sm text-muted-foreground">Memuat riwayat...</p>
                   </td>
                 </tr>
               ) : orders.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-16 text-center">
+                  <td colSpan={7} className="py-16 text-center">
                     <p className="text-sm text-muted-foreground">{emptyMessage}</p>
                     <p className="text-xs text-muted-foreground/60 mt-1">
                       {search || statusFilter ? "Coba ubah filter pencarian" : "Pesanan akan muncul di sini setelah Anda melakukan order"}
@@ -405,7 +396,7 @@ export function RoamerHistoryPage({ category, title, subtitle, emptyMessage }: R
                       </td>
 
                       <td className="px-4 py-3 text-center">
-                        <span className={cn("inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-semibold", sc.color)}>
+                        <span className={cn("inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-semibold", sc.pill)}>
                           <StatusIcon size={11} />
                           {sc.label}
                         </span>
@@ -476,7 +467,7 @@ export function RoamerHistoryPage({ category, title, subtitle, emptyMessage }: R
       </div>
 
       {mounted && selectedOrder && createPortal(
-        <DetailModal order={selectedOrder} onClose={() => setSelectedOrder(null)} />,
+        <DetailModal order={selectedOrder} onClose={handleCloseDetail} />,
         document.body
       )}
     </div>

@@ -22,6 +22,7 @@ export const adminNavigation: AdminNavGroup[] = [
     items: [
       { label: "Layanan", href: "/admin/layanan", icon: "Package" },
       { label: "Pesanan", href: "/admin/pesanan", icon: "ShoppingCart" },
+      { label: "Pesanan Manual", href: "/admin/pesanan-manual", icon: "ClipboardList" },
       { label: "Transaksi", href: "/admin/transaksi", icon: "Receipt" },
     ],
   },
@@ -42,6 +43,7 @@ export function getAdminPageInfo(pathname: string): { title: string; subtitle: s
     "/admin": { title: "Admin Dashboard", subtitle: "Ringkasan bisnis & aktivitas sistem" },
     "/admin/layanan": { title: "Kelola Layanan", subtitle: "Sinkronisasi & manajemen layanan dari DHRU API" },
     "/admin/pesanan": { title: "Kelola Pesanan", subtitle: "Semua pesanan dari seluruh pengguna" },
+    "/admin/pesanan-manual": { title: "Pesanan Manual", subtitle: "Order yang perlu diproses manual (Add Roamer / Unblock IMEI)" },
     "/admin/transaksi": { title: "Riwayat Transaksi", subtitle: "Log keuangan & mutasi saldo" },
     "/admin/users": { title: "Kelola Pengguna", subtitle: "Manajemen akun & role pengguna" },
     "/admin/pengaturan": { title: "Pengaturan", subtitle: "Konfigurasi keamanan sistem" },

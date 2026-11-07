@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useRef, useEffect, useState } from "react";
-import { Clipboard, Trash2, Check, AlertCircle } from "lucide-react";
+import { Clipboard, Check } from "lucide-react";
 import { parseIMEIList } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 

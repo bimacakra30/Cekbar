@@ -5,7 +5,9 @@ import { createPortal } from "react-dom";
 import { Search, Loader2, RefreshCw, Eye } from "lucide-react";
 import { formatRupiah, formatDate } from "@/lib/utils";
 import { cn } from "@/lib/utils";
+import { statusConfig } from "@/lib/status-config";
 import { CeirResultRenderer } from "@/components/history/ceir-result-renderer";
+import { CeirResultsData, isCeirResults, getServiceLabel, StatusCatatan } from "@/lib/ceir-helpers";
 
 type AdminOrder = {
   orderId: string;
@@ -28,14 +30,6 @@ type AdminOrder = {
   createdAt: string;
 };
 
-const orderStatusConfig: Record<string, { label: string; dot: string; pill: string }> = {
-  PENDING_PAYMENT: { label: "Belum Bayar", dot: "bg-amber-400", pill: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-800/40" },
-  PENDING: { label: "Pending", dot: "bg-blue-400", pill: "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/30 dark:text-blue-400 dark:border-blue-800/40" },
-  PROCESSING: { label: "Diproses", dot: "bg-blue-500", pill: "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/30 dark:text-blue-400 dark:border-blue-800/40" },
-  SUCCESS: { label: "Selesai", dot: "bg-emerald-400", pill: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-800/40" },
-  FAILED: { label: "Gagal", dot: "bg-red-400", pill: "bg-red-50 text-red-700 border-red-200 dark:bg-red-950/30 dark:text-red-400 dark:border-red-800/40" },
-  EXPIRED: { label: "Expired", dot: "bg-gray-400", pill: "bg-gray-50 text-gray-700 border-gray-200 dark:bg-gray-950/30 dark:text-gray-400 dark:border-gray-800/40" },
-};
 
 const paymentStatusConfig: Record<string, { label: string; dot: string; pill: string }> = {
   MENUNGGU: { label: "Belum Bayar", dot: "bg-amber-400", pill: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-800/40" },
@@ -62,7 +56,6 @@ export default function AdminPesananPage() {
         setOrders(data.orders ?? []);
       }
     } catch {
-      console.error("Gagal fetch orders");
     } finally {
       setLoading(false);
     }
@@ -149,6 +142,7 @@ export default function AdminPesananPage() {
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
+              <caption className="sr-only">Daftar semua pesanan</caption>
               <thead>
                 <tr className="border-b border-border bg-muted/30">
                   <th className="text-left text-[11px] font-bold uppercase tracking-wider text-muted-foreground px-4 py-3">Order</th>
@@ -162,7 +156,7 @@ export default function AdminPesananPage() {
               </thead>
               <tbody className="divide-y divide-border">
                 {filtered.map((order) => {
-                  const os = orderStatusConfig[order.orderStatus] ?? orderStatusConfig.PENDING;
+                  const os = statusConfig[order.orderStatus] ?? statusConfig.PENDING;
                   const ps = order.paymentStatus ? (paymentStatusConfig[order.paymentStatus] ?? paymentStatusConfig.MENUNGGU) : null;
 
                   return (
@@ -190,14 +184,14 @@ export default function AdminPesananPage() {
                       </td>
                       <td className="px-4 py-3.5">
                         <span className={cn("inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold border", os.pill)}>
-                          <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", os.dot)} />
+                          <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", os.dot)} aria-hidden="true" />
                           {os.label}
                         </span>
                       </td>
                       <td className="px-4 py-3.5">
                         {ps ? (
                           <span className={cn("inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold border", ps.pill)}>
-                            <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", ps.dot)} />
+                            <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", ps.dot)} aria-hidden="true" />
                             {ps.label}
                           </span>
                         ) : (
@@ -222,103 +216,20 @@ export default function AdminPesananPage() {
         )}
       </div>
 
-      {selectedOrder && typeof document !== "undefined" && createPortal(
-        <AdminDetailModal order={selectedOrder} onClose={() => setSelectedOrder(null)} />,
-        document.body
+      {selectedOrder && typeof document !== "undefined" && (
+        <AdminDetailModal order={selectedOrder} onClose={() => setSelectedOrder(null)} />
       )}
     </div>
   );
 }
 
-type CeirResultsData = {
-  ceir_order_id?: string;
-  service_id?: number;
-  result?: unknown;
-  processed?: number;
-  total_potong?: number;
-  transaction_id?: string;
-  error?: string;
-  errorCode?: string;
-};
-
-function isCeirResults(results: unknown): results is CeirResultsData {
-  return typeof results === "object" && results !== null && "service_id" in results;
-}
-
-function getServiceLabel(serviceId?: number): string {
-  switch (serviceId) {
-    case 30: return "STATUS IMEI CEIR";
-    case 31: return "HISTORY IMEI CEIR";
-    case 38: return "VALID ROAMER CEIR";
-    case 39: return "IMEI BEA CUKAI";
-    default: return "CEIR";
-  }
-}
-
-function getStatusCatatan(status: string, imei: string): { type: "info" | "warning" | "error"; text: string } | null {
-  switch (status) {
-    case "REGISTERED":
-      return {
-        type: "info",
-        text: `IMEI ${imei} terdaftar di database CEIR. Perangkat ini telah melewati proses registrasi resmi dan aman digunakan di Indonesia.`,
-      };
-    case "UNREGISTERED":
-      return {
-        type: "error",
-        text: `IMEI perangkat tidak terdaftar di database CEIR. Status ini berisiko tinggi mengalami pemblokiran sinyal.`,
-      };
-    case "UNKNOWN":
-      return {
-        type: "error",
-        text: `IMEI perangkat tidak dikenal atau tidak terdaftar di database CEIR. Status ini berisiko tinggi mengalami pemblokiran sinyal.`,
-      };
-    default:
-      return null;
-  }
-}
-
-function StatusCatatan({ result }: { result: Record<string, string[]> }) {
-  return (
-    <>
-      {Object.entries(result).flatMap(([status, imeis]) =>
-        imeis.map((imei, i) => {
-          const catatan = getStatusCatatan(status, imei);
-          if (!catatan) return null;
-          return (
-            <div
-              key={`cat-${status}-${i}`}
-              className={cn(
-                "rounded-xl px-4 py-3 border-l-4",
-                catatan.type === "info" && "bg-blue-50 dark:bg-blue-950/20 border-blue-400",
-                catatan.type === "error" && "bg-red-50 dark:bg-red-950/20 border-red-400",
-                catatan.type === "warning" && "bg-amber-50 dark:bg-amber-950/20 border-amber-400",
-              )}
-            >
-              <p className={cn(
-                "text-sm font-semibold mb-1",
-                catatan.type === "info" && "text-blue-700 dark:text-blue-300",
-                catatan.type === "error" && "text-red-700 dark:text-red-300",
-                catatan.type === "warning" && "text-amber-700 dark:text-amber-300",
-              )}>
-                Catatan IMEI {i + 1} ({imei}):
-              </p>
-              <p className={cn(
-                "text-sm leading-relaxed",
-                catatan.type === "info" && "text-blue-600 dark:text-blue-400",
-                catatan.type === "error" && "text-red-600 dark:text-red-400",
-                catatan.type === "warning" && "text-amber-600 dark:text-amber-400",
-              )}>
-                {catatan.text}
-              </p>
-            </div>
-          );
-        })
-      )}
-    </>
-  );
-}
-
 function AdminDetailModal({ order, onClose }: { order: AdminOrder; onClose: () => void }) {
+  useEffect(() => {
+    const handleEsc = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", handleEsc);
+    return () => document.removeEventListener("keydown", handleEsc);
+  }, [onClose]);
+
   const isRoamer = order.roamerMonths !== null;
   const hasCeirResults = order.results && isCeirResults(order.results);
   const serviceId = hasCeirResults ? (order.results as CeirResultsData).service_id : undefined;
@@ -327,7 +238,7 @@ function AdminDetailModal({ order, onClose }: { order: AdminOrder; onClose: () =
     : undefined;
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4" role="dialog" aria-modal="true" onClick={onClose}>
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
       <div
         className="relative bg-card rounded-2xl border border-border shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col animate-fade-in"
@@ -340,6 +251,7 @@ function AdminDetailModal({ order, onClose }: { order: AdminOrder; onClose: () =
           </div>
           <button
             onClick={onClose}
+            aria-label="Tutup"
             className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground"
           >
             ✕
@@ -372,10 +284,10 @@ function AdminDetailModal({ order, onClose }: { order: AdminOrder; onClose: () =
                 <span className="text-muted-foreground shrink-0">Status Order</span>
                 <span className={cn(
                   "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold border",
-                  (orderStatusConfig[order.orderStatus] ?? orderStatusConfig.PENDING).pill
+                  (statusConfig[order.orderStatus] ?? statusConfig.PENDING).pill
                 )}>
-                  <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", (orderStatusConfig[order.orderStatus] ?? orderStatusConfig.PENDING).dot)} />
-                  {(orderStatusConfig[order.orderStatus] ?? orderStatusConfig.PENDING).label}
+                  <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", (statusConfig[order.orderStatus] ?? statusConfig.PENDING).dot)} aria-hidden="true" />
+                  {(statusConfig[order.orderStatus] ?? statusConfig.PENDING).label}
                 </span>
               </div>
               {order.paymentStatus && (
@@ -385,7 +297,7 @@ function AdminDetailModal({ order, onClose }: { order: AdminOrder; onClose: () =
                     "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold border",
                     (paymentStatusConfig[order.paymentStatus] ?? paymentStatusConfig.MENUNGGU).pill
                   )}>
-                    <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", (paymentStatusConfig[order.paymentStatus] ?? paymentStatusConfig.MENUNGGU).dot)} />
+                    <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", (paymentStatusConfig[order.paymentStatus] ?? paymentStatusConfig.MENUNGGU).dot)} aria-hidden="true" />
                     {(paymentStatusConfig[order.paymentStatus] ?? paymentStatusConfig.MENUNGGU).label}
                   </span>
                 </div>

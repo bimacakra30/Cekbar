@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import crypto from "crypto";
 import prisma from "@/lib/prisma";
 import { sendMail, verificationOtpEmail } from "@/lib/mailer";
 
 function generateOtp(): string {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+  return crypto.randomInt(100000, 1000000).toString();
 }
 
 export async function POST(req: NextRequest) {
@@ -54,13 +55,13 @@ export async function POST(req: NextRequest) {
     try {
       await sendMail({ to: email, subject, html });
     } catch (err) {
-      console.error("[ResendOTP] Gagal kirim:", err);
+      console.error("[ResendOTP] Gagal kirim");
       return NextResponse.json({ error: "Gagal mengirim email" }, { status: 500 });
     }
 
     return NextResponse.json({ message: "Kode verifikasi baru telah dikirim" });
   } catch (error) {
-    console.error("Resend OTP error:", error);
+    console.error("[ResendOTP] Error");
     return NextResponse.json({ error: "Terjadi kesalahan server" }, { status: 500 });
   }
 }

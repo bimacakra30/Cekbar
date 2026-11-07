@@ -1,6 +1,20 @@
 "use client";
 
-import * as LucideIcons from "lucide-react";
+import {
+  Circle, Clock, Cloud, FileText, Globe, History,
+  Laptop, LayoutDashboard, Package, Receipt, Search,
+  Settings, Shield, ShoppingCart, Smartphone,
+  TabletSmartphone, Users, Wallet, XCircle, Zap,
+} from "lucide-react";
+import type { LucideProps } from "lucide-react";
+import type { ComponentType } from "react";
+
+const ICON_MAP: Record<string, ComponentType<LucideProps>> = {
+  Circle, Clock, Cloud, FileText, Globe, History,
+  Laptop, LayoutDashboard, Package, Receipt, Search,
+  Settings, Shield, ShoppingCart, Smartphone,
+  TabletSmartphone, Users, Wallet, XCircle, Zap,
+};
 
 type DynamicIconProps = {
   name: string;
@@ -10,12 +24,9 @@ type DynamicIconProps = {
 };
 
 export function DynamicIcon({ name, className, size = 18, style }: DynamicIconProps) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const IconComponent = (LucideIcons as unknown as Record<string, React.ComponentType<{ className?: string; size?: number; style?: React.CSSProperties }>>)[name];
-
+  const IconComponent = ICON_MAP[name];
   if (!IconComponent) {
-    return <LucideIcons.Circle className={className} size={size} style={style} />;
+    return <Circle className={className} size={size} style={style} />;
   }
-
   return <IconComponent className={className} size={size} style={style} />;
 }

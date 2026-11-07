@@ -4,9 +4,14 @@ import { sessionOptions, type SessionData } from "@/lib/session";
 
 export async function POST(req: NextRequest) {
   const response = NextResponse.json({ message: "Logout berhasil" });
-  
+
   const session = await getIronSession<SessionData>(req, response, sessionOptions);
   session.destroy();
-  
+
+  response.cookies.set(sessionOptions.cookieName, "", {
+    ...sessionOptions.cookieOptions,
+    maxAge: 0,
+  });
+
   return response;
 }

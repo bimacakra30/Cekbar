@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { createRateLimiter } from "@/lib/rate-limit";
+
+const verifyLimiter = createRateLimiter({ interval: 15 * 60 * 1000, maxRequests: 5 });
 
 export async function POST(req: NextRequest) {
   try {
@@ -7,6 +10,14 @@ export async function POST(req: NextRequest) {
 
     if (!email || !otp) {
       return NextResponse.json({ error: "Email dan kode OTP wajib diisi" }, { status: 400 });
+    }
+
+    const rlResult = verifyLimiter.check(email.toLowerCase());
+    if (!rlResult.allowed) {
+      return NextResponse.json(
+        { error: "Terlalu banyak percobaan. Silakan tunggu 15 menit." },
+        { status: 429 }
+      );
     }
 
     const record = await prisma.emailVerification.findFirst({
@@ -19,6 +30,7 @@ export async function POST(req: NextRequest) {
     });
 
     if (!record) {
+      verifyLimiter.check(email.toLowerCase());
       return NextResponse.json({ error: "Kode verifikasi salah" }, { status: 400 });
     }
 
@@ -26,33 +38,26 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Kode verifikasi sudah kadaluarsa. Silakan kirim ulang." }, { status: 400 });
     }
 
-    await prisma.emailVerification.update({
-      where: { id: record.id },
-      data: { used: true },
-    });
-
-    const user = await prisma.user.findUnique({
-      where: { email: email.toLowerCase() },
-    });
-
-    if (!user) {
-      return NextResponse.json({ error: "Akun tidak ditemukan" }, { status: 404 });
-    }
-
-    await prisma.user.update({
-      where: { id: user.id },
-      data: {
-        email_verified: true,
-        status: "active",
-      },
-    });
+    await prisma.$transaction([
+      prisma.emailVerification.update({
+        where: { id: record.id },
+        data: { used: true },
+      }),
+      prisma.user.update({
+        where: { email: email.toLowerCase() },
+        data: {
+          email_verified: true,
+          status: "active",
+        },
+      }),
+    ]);
 
     return NextResponse.json({
       message: "Email berhasil diverifikasi! Silakan login.",
       verified: true,
     });
   } catch (error) {
-    console.error("Verify OTP error:", error);
+    console.error("[VerifyOTP] Error");
     return NextResponse.json({ error: "Terjadi kesalahan server" }, { status: 500 });
   }
 }

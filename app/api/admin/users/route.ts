@@ -7,6 +7,11 @@ import type { Prisma } from "@prisma/client";
 
 export async function GET(req: NextRequest) {
   try {
+    const user = await getSessionUser(req);
+    if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
     const { searchParams } = new URL(req.url);
     const role = searchParams.get("role");
     const search = searchParams.get("search");
@@ -14,7 +19,7 @@ export async function GET(req: NextRequest) {
     const where: Prisma.UserWhereInput = {};
 
     if (role && role !== "ALL") {
-      where.role = role as "user" | "admin" | "superadmin";
+      where.role = role as "user" | "reseller" | "admin" | "superadmin";
     }
 
     if (search) {
@@ -41,7 +46,7 @@ export async function GET(req: NextRequest) {
     const rows = await prisma.$queryRawUnsafe<Record<string, unknown>[]>(
       `SELECT id, nama, username, email, no_hp, role, status, last_login_at, created_at, updated_at
        FROM users ${whereClause}
-       ORDER BY FIELD(role, 'superadmin', 'admin', 'user'), created_at ASC`,
+       ORDER BY FIELD(role, 'superadmin', 'admin', 'reseller', 'user'), created_at ASC`,
       ...params
     );
 
@@ -50,7 +55,7 @@ export async function GET(req: NextRequest) {
       total: rows.length,
     });
   } catch (error) {
-    console.error("Get users error:", error);
+    console.error("[AdminUsers] GET error");
     return NextResponse.json(
       { error: "Gagal mengambil data pengguna" },
       { status: 500 }
@@ -60,7 +65,15 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const { username, email, password, role, status } = await req.json();
+    const caller = await getSessionUser(req);
+    if (!caller) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    if (caller.role !== "admin" && caller.role !== "superadmin") {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    const { username, email, password, role, status, no_hp } = await req.json();
 
     if (!username || !email || !password) {
       return NextResponse.json(
@@ -76,25 +89,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const existing = await prisma.user.findFirst({
-      where: { OR: [{ email }, { username }] },
-      select: { id: true },
-    });
-
-    if (existing) {
-      return NextResponse.json(
-        { error: "Email atau username sudah terdaftar" },
-        { status: 409 }
-      );
-    }
-
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    const caller = await getSessionUser(req);
-    if (!caller) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     const requestedRole = (role as string) || "user";
 
     if (requestedRole === "superadmin") {
@@ -105,7 +99,30 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Admin hanya dapat menambahkan pengguna dengan role user" }, { status: 403 });
     }
 
-    const userRole = requestedRole as "user" | "admin";
+    const phoneValue = no_hp || `0${Date.now().toString().slice(-11)}`;
+
+    const existingConditions: Prisma.UserWhereInput[] = [{ email }, { username }];
+    if (no_hp) {
+      existingConditions.push({ no_hp });
+    }
+
+    const existing = await prisma.user.findFirst({
+      where: { OR: existingConditions },
+      select: { id: true, email: true, username: true },
+    });
+
+    if (existing) {
+      if (existing.email === email) {
+        return NextResponse.json({ error: "Email sudah terdaftar" }, { status: 409 });
+      }
+      if (existing.username === username) {
+        return NextResponse.json({ error: "Username sudah terdaftar" }, { status: 409 });
+      }
+      return NextResponse.json({ error: "Nomor HP sudah terdaftar" }, { status: 409 });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 12);
+    const userRole = requestedRole as "user" | "reseller" | "admin";
     const userStatus = (status || "active") as "active" | "inactive";
 
     const newUser = await prisma.user.create({
@@ -113,10 +130,11 @@ export async function POST(req: NextRequest) {
         nama: username,
         username,
         email,
-        no_hp: "",
+        no_hp: phoneValue,
         password: hashedPassword,
         role: userRole,
         status: userStatus,
+        email_verified: true,
       },
     });
 
@@ -127,10 +145,19 @@ export async function POST(req: NextRequest) {
       },
       { status: 201 }
     );
-  } catch (error) {
-    console.error("Create user error:", error);
+  } catch (error: unknown) {
+    console.error("[AdminUsers] POST error:", error);
+
+    const errMsg = error instanceof Error ? error.message : "";
+    if (errMsg.includes("Unique constraint")) {
+      return NextResponse.json(
+        { error: "Email, username, atau nomor HP sudah terdaftar" },
+        { status: 409 }
+      );
+    }
+
     return NextResponse.json(
-      { error: "Gagal menambahkan pengguna" },
+      { error: "Gagal menambahkan pengguna. Coba lagi." },
       { status: 500 }
     );
   }

@@ -1,14 +1,32 @@
 
 import { NextRequest, NextResponse } from "next/server";
+import crypto from "crypto";
 import prisma from "@/lib/prisma";
 import { createQrisPayment, getGopayApiUrl } from "@/lib/gopay";
-import { getSessionUser } from "@/lib/session";
+import { getSessionUser, verifyCsrfOrigin } from "@/lib/session";
 import { getBalance } from "@/lib/ceirid";
+import { processOrderAfterPayment } from "@/lib/process-order";
 
 function generateId(type: "ORD" | "PAY"): string {
   const ts = new Date().toISOString().replace(/[-:T.Z]/g, "").slice(2, 14);
-  const rand = Math.floor(Math.random() * 9000 + 1000);
+  const rand = crypto.randomBytes(4).toString("hex");
   return `CEKBAR-${type}-${ts}-${rand}`;
+}
+
+let ceirOrderLock = false;
+
+async function acquireCeirLock(timeoutMs = 10000): Promise<boolean> {
+  const start = Date.now();
+  while (ceirOrderLock) {
+    if (Date.now() - start > timeoutMs) return false;
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  ceirOrderLock = true;
+  return true;
+}
+
+function releaseCeirLock() {
+  ceirOrderLock = false;
 }
 
 export async function POST(req: NextRequest) {
@@ -18,6 +36,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    if (!verifyCsrfOrigin(req)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
     const body = await req.json();
     const { serviceId, serviceName, imeiList } = body;
 
@@ -25,8 +47,21 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Data order tidak lengkap" }, { status: 400 });
     }
 
+    if (imeiList.length > 10) {
+      return NextResponse.json({ error: "Maksimal 10 IMEI per order" }, { status: 400 });
+    }
+
+    const imeiRegex = /^\d{15}$/;
+    const invalidImeis = imeiList.filter((imei: string) => !imeiRegex.test(String(imei).trim()));
+    if (invalidImeis.length > 0) {
+      return NextResponse.json(
+        { error: `Format IMEI tidak valid (harus 15 digit angka): ${invalidImeis.slice(0, 3).join(", ")}${invalidImeis.length > 3 ? "..." : ""}` },
+        { status: 400 }
+      );
+    }
+
     const dbService = await prisma.service.findFirst({
-      where: { service_name: serviceName },
+      where: { service_id: serviceId },
       select: {
         service_id: true,
         service_name: true,
@@ -62,10 +97,6 @@ export async function POST(req: NextRequest) {
         const balanceData = await getBalance();
         const currentCredit = balanceData.credit;
 
-        console.log(
-          `[Order] CEIR balance check: credit=${currentCredit}, needed=${totalBuyCost} (${imeiList.length} × ${buyPricePerUnit})`
-        );
-
         if (currentCredit < totalBuyCost) {
           return NextResponse.json(
             {
@@ -76,7 +107,7 @@ export async function POST(req: NextRequest) {
           );
         }
       } catch (balanceErr) {
-        console.error("[Order] Gagal cek saldo CEIR:", balanceErr);
+        console.error("[Order] Gagal cek saldo CEIR");
         return NextResponse.json(
           {
             error: "Tidak dapat memverifikasi ketersediaan layanan. Silakan coba beberapa saat lagi.",
@@ -84,6 +115,67 @@ export async function POST(req: NextRequest) {
           },
           { status: 503 }
         );
+      }
+    }
+    // ────────────────────────────────────────────────────────────────
+
+    // ── Admin direct order (tanpa pembayaran) ───────────────────────
+    if (user.role === "reseller") {
+      if (!(await acquireCeirLock())) {
+        return NextResponse.json(
+          { error: "Server sedang memproses order lain. Coba lagi." },
+          { status: 503 }
+        );
+      }
+
+      try {
+        const buyPricePerUnit = Number(dbService.buy_price);
+        const totalBuyPrice = imeiList.length * buyPricePerUnit;
+        const orderId = generateId("ORD");
+
+        await prisma.order.create({
+          data: {
+            order_id: orderId,
+            user_id: user.id,
+            service_id: dbService.service_id,
+            service_name: dbService.service_name,
+            imei_list: imeiList,
+            total_price: totalBuyPrice,
+            status: "PENDING",
+            is_direct_order: true,
+          },
+        });
+
+        try {
+          await processOrderAfterPayment(orderId);
+
+          const processedOrder = await prisma.order.findUnique({
+            where: { order_id: orderId },
+            select: { status: true, results: true, ceir_order_id: true },
+          });
+
+          return NextResponse.json({
+            orderId,
+            status: processedOrder?.status ?? "PENDING",
+            results: processedOrder?.results ?? null,
+            ceirOrderId: processedOrder?.ceir_order_id ?? null,
+            totalPrice: totalBuyPrice,
+            serviceName: dbService.service_name,
+            isDirectOrder: true,
+          }, { status: 201 });
+        } catch (processErr) {
+          console.error(`[DirectOrder] Process error for ${orderId}`);
+          return NextResponse.json({
+            orderId,
+            status: "FAILED",
+            error: (processErr as Error).message,
+            totalPrice: totalBuyPrice,
+            serviceName: dbService.service_name,
+            isDirectOrder: true,
+          }, { status: 201 });
+        }
+      } finally {
+        releaseCeirLock();
       }
     }
     // ────────────────────────────────────────────────────────────────
@@ -97,29 +189,30 @@ export async function POST(req: NextRequest) {
     const appUrl = (process.env.APP_URL || "").replace(/\/+$/, "");
     const callbackUrl = appUrl ? `${appUrl}/api/webhooks/gopay` : "";
 
-    await prisma.order.create({
-      data: {
-        order_id: orderId,
-        user_id: user.id,
-        service_id: dbService.service_id,
-        service_name: dbService.service_name,
-        imei_list: imeiList,
-        total_price: totalPrice,
-        status: "PENDING_PAYMENT",
-      },
-    });
-
-    await prisma.payment.create({
-      data: {
-        payment_id: paymentId,
-        order_id: orderId,
-        amount: totalPrice,
-        fee: 0,
-        total_amount: totalPrice,
-        status: "MENUNGGU",
-        expires_at: expiresAt,
-      },
-    });
+    await prisma.$transaction([
+      prisma.order.create({
+        data: {
+          order_id: orderId,
+          user_id: user.id,
+          service_id: dbService.service_id,
+          service_name: dbService.service_name,
+          imei_list: imeiList,
+          total_price: totalPrice,
+          status: "PENDING_PAYMENT",
+        },
+      }),
+      prisma.payment.create({
+        data: {
+          payment_id: paymentId,
+          order_id: orderId,
+          amount: totalPrice,
+          fee: 0,
+          total_amount: totalPrice,
+          status: "MENUNGGU",
+          expires_at: expiresAt,
+        },
+      }),
+    ]);
 
     let qrisId = "";
     let trxId = "";
@@ -142,7 +235,7 @@ export async function POST(req: NextRequest) {
         data: { qris_id: qrisId, trx_id: trxId, qr_image: qrImage, qris_url: qrisUrl },
       });
     } catch (gopayError) {
-      console.error("[GoPay] Gagal buat QRIS:", gopayError);
+      console.error("[GoPay] Gagal buat QRIS");
     }
 
     const gopayApiUrl = getGopayApiUrl();
@@ -163,7 +256,7 @@ export async function POST(req: NextRequest) {
     }, { status: 201 });
 
   } catch (error) {
-    console.error("POST /api/orders error:", error);
+    console.error("[Orders] POST error");
     return NextResponse.json({ error: "Terjadi kesalahan server" }, { status: 500 });
   }
 }
@@ -208,6 +301,7 @@ export async function GET(req: NextRequest) {
         paymentType: p?.payment_type ?? null,
         qrisId: p?.qris_id ?? null,
         results: o.results ?? null,
+        isDirectOrder: o.is_direct_order ?? false,
         createdAt: o.created_at,
         completedAt: o.completed_at ?? null,
       };
@@ -215,7 +309,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ orders });
   } catch (error) {
-    console.error("GET /api/orders error:", error);
+    console.error("[Orders] GET error");
     return NextResponse.json({ error: "Terjadi kesalahan server" }, { status: 500 });
   }
 }

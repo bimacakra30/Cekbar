@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ settings: result });
   } catch (error) {
-    console.error("[Settings] GET error:", error);
+    console.error("[Settings] GET error");
     return NextResponse.json({ error: "Terjadi kesalahan server" }, { status: 500 });
   }
 }
@@ -61,10 +61,9 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    console.log(`[Settings] Updated by ${user.username}: ${updates.map(u => `${u.key}=${u.value}`).join(", ")}`);
     return NextResponse.json({ message: "Pengaturan berhasil disimpan", updated: updates.length });
   } catch (error) {
-    console.error("[Settings] POST error:", error);
+    console.error("[Settings] POST error");
     return NextResponse.json({ error: "Terjadi kesalahan server" }, { status: 500 });
   }
 }

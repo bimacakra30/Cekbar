@@ -1,12 +1,14 @@
 "use client";
 
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
-import { X, ChevronDown } from "lucide-react";
+import { X, ChevronDown, User, LogOut } from "lucide-react";
 import { CekbarLogo } from "@/components/ui/cekbar-logo";
 import { cn } from "@/lib/utils";
 import { DynamicIcon } from "@/components/ui/dynamic-icon";
 import { useState, useEffect } from "react";
+import { useAuth } from "@/hooks/use-auth";
+import { LogoutModal, useLogoutModal } from "@/components/ui/logout-modal";
 
 type SidebarProps = {
   isOpen: boolean;
@@ -72,17 +74,40 @@ function getServiceIcon(serviceName: string, groupName: string): string {
 
 export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const [collapsedGroups, setCollapsedGroups] = useState<Record<number, boolean>>({});
   const [dynamicNav, setDynamicNav] = useState<NavGroup[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const { user } = useAuth();
+  const logoutModal = useLogoutModal();
+  const [loggingOut, setLoggingOut] = useState(false);
+
+  async function handleLogout() {
+    setLoggingOut(true);
+    await fetch("/api/auth/logout", { method: "POST" });
+    router.push("/login");
+  }
 
   const toggleGroup = (idx: number) => {
     setCollapsedGroups(prev => ({ ...prev, [idx]: !prev[idx] }));
   };
 
   useEffect(() => {
+    const CACHE_KEY = "sidebar_services";
+    const CACHE_TTL = 5 * 60 * 1000;
+
     async function fetchServices() {
       try {
+        const cached = sessionStorage.getItem(CACHE_KEY);
+        if (cached) {
+          const { data: cachedGroups, ts } = JSON.parse(cached);
+          if (Date.now() - ts < CACHE_TTL) {
+            setDynamicNav(cachedGroups);
+            setLoaded(true);
+            return;
+          }
+        }
+
         const res = await fetch("/api/services");
         const data = await res.json();
         if (res.ok && data.services?.length > 0) {
@@ -125,9 +150,12 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
             };
           }).filter(group => group.items.length > 0);
           setDynamicNav(groups);
+
+          try {
+            sessionStorage.setItem(CACHE_KEY, JSON.stringify({ data: groups, ts: Date.now() }));
+          } catch {}
         }
       } catch {
-        console.error("Gagal fetch layanan untuk sidebar");
       } finally {
         setLoaded(true);
       }
@@ -192,6 +220,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                   {group.title ? (
                     <button
                       onClick={() => toggleGroup(groupIdx)}
+                      aria-expanded={!isGroupCollapsed}
                       className="w-full flex items-center justify-between px-3 mb-2"
                     >
                       <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground/50 select-none">
@@ -271,13 +300,61 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
           )}
         </nav>
 
-        <div className="px-5 py-4 shrink-0">
-          <div className="h-px bg-border/40 mb-3" />
+        <div className="px-3 shrink-0">
+          <div className="h-px bg-border/40 mb-1" />
+          {user && (
+            <div className="flex items-center gap-3 px-3 py-2.5 mb-1">
+              <div
+                className="w-8 h-8 rounded-xl flex items-center justify-center text-white text-xs font-bold shrink-0"
+                style={{ background: "linear-gradient(135deg, #3b82f6, #1d4ed8)" }}
+              >
+                <span suppressHydrationWarning>{user.username.slice(0, 2).toUpperCase()}</span>
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-[13px] font-semibold text-foreground truncate" suppressHydrationWarning>
+                  {user.username}
+                </p>
+                <p className="text-[11px] text-muted-foreground truncate" suppressHydrationWarning>
+                  {user.email}
+                </p>
+              </div>
+            </div>
+          )}
+          <Link
+            href="/profil"
+            onClick={onClose}
+            className={cn(
+              "flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-medium transition-all duration-200",
+              pathname === "/profil"
+                ? "text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-500/10"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+            )}
+          >
+            <User size={16} className="shrink-0" />
+            Profil Saya
+          </Link>
+          <button
+            onClick={logoutModal.show}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-all duration-200"
+          >
+            <LogOut size={16} className="shrink-0" />
+            Keluar
+          </button>
+        </div>
+
+        <div className="px-5 py-3 shrink-0">
           <p className="text-[10px] text-muted-foreground/40 font-medium">
             Cekbar v1.0 — Phase 1
           </p>
         </div>
       </aside>
+
+      <LogoutModal
+        open={logoutModal.open}
+        onCancel={logoutModal.hide}
+        onConfirm={handleLogout}
+        loading={loggingOut}
+      />
     </>
   );
 }

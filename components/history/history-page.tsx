@@ -1,30 +1,15 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import { useSearchParams } from "next/navigation";
-import { Search, ChevronLeft, ChevronRight, Loader2, ExternalLink, X, Eye } from "lucide-react";
+import { Search, ChevronLeft, ChevronRight, Loader2, ExternalLink, X, Eye, AlertCircle } from "lucide-react";
 import { formatRupiah, formatDate } from "@/lib/utils";
 import { cn } from "@/lib/utils";
+import { statusConfig } from "@/lib/status-config";
 import { CeirResultRenderer } from "./ceir-result-renderer";
+import { CeirResultsData, OrderResult, isCeirResults, getServiceLabel, StatusCatatan } from "@/lib/ceir-helpers";
+import { useOrderHistory } from "@/hooks/use-order-history";
 import Link from "next/link";
-
-type OrderResult = {
-  imei?: string;
-  status?: string;
-  detail?: string;
-};
-
-type CeirResultsData = {
-  ceir_order_id?: string;
-  service_id?: number;
-  result?: unknown;
-  processed?: number;
-  total_potong?: number;
-  transaction_id?: string;
-  error?: string;
-  errorCode?: string;
-};
 
 type HistoryOrder = {
   orderId: string;
@@ -46,23 +31,9 @@ type HistoryOrder = {
   createdAt: string;
   updatedAt: string;
   results: OrderResult[] | CeirResultsData | null;
+  isDirectOrder?: boolean;
 };
 
-type Pagination = {
-  total: number;
-  page: number;
-  limit: number;
-  totalPages: number;
-};
-
-const statusConfig: Record<string, { label: string; color: string; dot: string }> = {
-  SUCCESS:         { label: "Selesai",     color: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400", dot: "bg-emerald-500" },
-  PROCESSING:      { label: "Diproses",    color: "bg-blue-500/10 text-blue-600 dark:text-blue-400",          dot: "bg-blue-500" },
-  PENDING:         { label: "Pending",     color: "bg-amber-500/10 text-amber-600 dark:text-amber-400",       dot: "bg-amber-500" },
-  PENDING_PAYMENT: { label: "Belum Bayar", color: "bg-orange-500/10 text-orange-600 dark:text-orange-400",    dot: "bg-orange-500" },
-  FAILED:          { label: "Gagal",       color: "bg-red-500/10 text-red-600 dark:text-red-400",             dot: "bg-red-500" },
-  EXPIRED:         { label: "Kadaluarsa",  color: "bg-gray-500/10 text-gray-500",                             dot: "bg-gray-400" },
-};
 
 type HistoryPageProps = {
   category: "CEIR" | "GSM" | "UNLOCK_IMEI";
@@ -71,83 +42,6 @@ type HistoryPageProps = {
   emptyMessage: string;
   statusOptions?: string[];
 };
-
-function isCeirResults(results: unknown): results is CeirResultsData {
-  return typeof results === "object" && results !== null && "service_id" in results;
-}
-
-function getServiceLabel(serviceId?: number): string {
-  switch (serviceId) {
-    case 30: return "STATUS IMEI CEIR";
-    case 31: return "HISTORY IMEI CEIR";
-    case 38: return "VALID ROAMER CEIR";
-    case 39: return "IMEI BEA CUKAI";
-    default: return "CEIR";
-  }
-}
-
-function getStatusCatatan(status: string, imei: string): { type: "info" | "warning" | "error"; text: string } | null {
-  switch (status) {
-    case "REGISTERED":
-      return {
-        type: "info",
-        text: `IMEI ${imei} terdaftar di database CEIR. Perangkat ini telah melewati proses registrasi resmi dan aman digunakan di Indonesia.`,
-      };
-    case "UNREGISTERED":
-      return {
-        type: "error",
-        text: `IMEI perangkat tidak terdaftar di database CEIR. Status ini berisiko tinggi mengalami pemblokiran sinyal. Namun Anda masih bisa mendapatkan sinyal dengan melakukan registrasi IMEI melalui layanan Order IMEI 1 Bulan atau 3 Bulan yang tersedia di platform kami.`,
-      };
-    case "UNKNOWN":
-      return {
-        type: "error",
-        text: `IMEI perangkat tidak dikenal atau tidak terdaftar di database CEIR. Status ini berisiko tinggi mengalami pemblokiran sinyal. Namun Anda masih bisa mendapatkan sinyal dengan melakukan registrasi IMEI melalui layanan Order IMEI 1 Bulan atau 3 Bulan yang tersedia di platform kami.`,
-      };
-    default:
-      return null;
-  }
-}
-
-function StatusCatatan({ result }: { result: Record<string, string[]> }) {
-  return (
-    <>
-      {Object.entries(result).flatMap(([status, imeis]) =>
-        imeis.map((imei, i) => {
-          const catatan = getStatusCatatan(status, imei);
-          if (!catatan) return null;
-          return (
-            <div
-              key={`cat-${status}-${i}`}
-              className={cn(
-                "rounded-xl px-4 py-3 border-l-4",
-                catatan.type === "info" && "bg-blue-50 dark:bg-blue-950/20 border-blue-400",
-                catatan.type === "error" && "bg-red-50 dark:bg-red-950/20 border-red-400",
-                catatan.type === "warning" && "bg-amber-50 dark:bg-amber-950/20 border-amber-400",
-              )}
-            >
-              <p className={cn(
-                "text-sm font-semibold mb-1",
-                catatan.type === "info" && "text-blue-700 dark:text-blue-300",
-                catatan.type === "error" && "text-red-700 dark:text-red-300",
-                catatan.type === "warning" && "text-amber-700 dark:text-amber-300",
-              )}>
-                Catatan IMEI {i + 1} ({imei}):
-              </p>
-              <p className={cn(
-                "text-sm leading-relaxed",
-                catatan.type === "info" && "text-blue-600 dark:text-blue-400",
-                catatan.type === "error" && "text-red-600 dark:text-red-400",
-                catatan.type === "warning" && "text-amber-600 dark:text-amber-400",
-              )}>
-                {catatan.text}
-              </p>
-            </div>
-          );
-        })
-      )}
-    </>
-  );
-}
 
 function DetailModal({ order, onClose }: { order: HistoryOrder; onClose: () => void }) {
   const isRoamer = order.roamerMonths !== null;
@@ -190,7 +84,7 @@ function DetailModal({ order, onClose }: { order: HistoryOrder; onClose: () => v
     : undefined;
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4" role="dialog" aria-modal="true" onClick={onClose}>
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
       <div
         className="relative bg-card rounded-2xl border border-border shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col animate-fade-in"
@@ -203,6 +97,7 @@ function DetailModal({ order, onClose }: { order: HistoryOrder; onClose: () => v
           </div>
           <button
             onClick={onClose}
+            aria-label="Tutup"
             className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground"
           >
             <X size={18} />
@@ -300,6 +195,16 @@ function DetailModal({ order, onClose }: { order: HistoryOrder; onClose: () => v
               <p className="text-sm text-red-600 dark:text-red-400">{currentOrder.statusNote}</p>
             </div>
           )}
+
+          {currentOrder.status !== "FAILED" && !isRoamer && currentOrder.statusNote && (
+            <div className="flex gap-3 p-3.5 bg-amber-500/5 border border-amber-500/15 rounded-lg">
+              <AlertCircle size={16} className="text-amber-500 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60 mb-0.5">Catatan</p>
+                <p className="text-sm text-foreground leading-relaxed">{currentOrder.statusNote}</p>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="shrink-0 border-t border-border px-6 py-4 flex items-center justify-end gap-3">
@@ -318,7 +223,7 @@ function DetailModal({ order, onClose }: { order: HistoryOrder; onClose: () => v
 
 function OrderRow({ order: initialOrder, onViewDetail }: { order: HistoryOrder; onViewDetail: (order: HistoryOrder) => void }) {
   const [order] = useState(initialOrder);
-  const sc = statusConfig[order.status] ?? { label: order.status, color: "bg-gray-500/10 text-gray-500", dot: "bg-gray-400" };
+  const sc = statusConfig[order.status] ?? { label: order.status, pill: "bg-gray-500/10 text-gray-500", dot: "bg-gray-400" };
   const hasResults = (order.results !== null && (
     isCeirResults(order.results)
       ? order.results.result !== undefined || order.results.error !== undefined
@@ -330,6 +235,11 @@ function OrderRow({ order: initialOrder, onViewDetail }: { order: HistoryOrder; 
       <td className="px-4 py-3.5">
         <div className="flex items-center gap-1.5">
           <span className="text-xs font-mono font-medium text-foreground">{order.orderId}</span>
+          {order.isDirectOrder && (
+            <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+              Direct
+            </span>
+          )}
           {order.status === "PENDING_PAYMENT" && order.paymentId && (
             <Link
               href={`/pembayaran/${order.paymentId}`}
@@ -374,8 +284,8 @@ function OrderRow({ order: initialOrder, onViewDetail }: { order: HistoryOrder; 
       </td>
 
       <td className="px-4 py-3.5 text-center">
-        <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold ${sc.color}`}>
-          <span className={`w-1.5 h-1.5 rounded-full ${sc.dot}`} />
+        <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold ${sc.pill}`}>
+          <span className={`w-1.5 h-1.5 rounded-full ${sc.dot}`} aria-hidden="true" />
           {sc.label}
         </span>
       </td>
@@ -399,7 +309,7 @@ function OrderRow({ order: initialOrder, onViewDetail }: { order: HistoryOrder; 
 
 function MobileOrderCard({ order: initialOrder, onViewDetail }: { order: HistoryOrder; onViewDetail: (order: HistoryOrder) => void }) {
   const [order] = useState(initialOrder);
-  const sc = statusConfig[order.status] ?? { label: order.status, color: "bg-gray-500/10 text-gray-500", dot: "bg-gray-400" };
+  const sc = statusConfig[order.status] ?? { label: order.status, pill: "bg-gray-500/10 text-gray-500", dot: "bg-gray-400" };
   const hasResults = (order.results !== null && (
     isCeirResults(order.results)
       ? order.results.result !== undefined || order.results.error !== undefined
@@ -410,11 +320,18 @@ function MobileOrderCard({ order: initialOrder, onViewDetail }: { order: History
     <div className="border border-border rounded-xl p-4 space-y-3 bg-card">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="text-xs font-mono font-bold text-blue-600 dark:text-blue-400 truncate">{order.orderId}</p>
+          <p className="text-xs font-mono font-bold text-blue-600 dark:text-blue-400 truncate">
+            {order.orderId}
+            {order.isDirectOrder && (
+              <span className="ml-1.5 text-[9px] font-semibold px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                Direct
+              </span>
+            )}
+          </p>
           <p className="text-[10px] text-muted-foreground mt-0.5">{formatDate(order.createdAt)}</p>
         </div>
-        <span className={`shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold ${sc.color}`}>
-          <span className={`w-1.5 h-1.5 rounded-full ${sc.dot}`} />
+        <span className={`shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold ${sc.pill}`}>
+          <span className={`w-1.5 h-1.5 rounded-full ${sc.dot}`} aria-hidden="true" />
           {sc.label}
         </span>
       </div>
@@ -504,6 +421,7 @@ function OrderList({ orders, loading, emptyMessage, search, statusFilter, onView
 
       <div className="hidden md:block overflow-x-auto">
         <table className="w-full">
+          <caption className="sr-only">Riwayat pesanan</caption>
           <thead>
             <tr className="border-b border-border bg-muted/30">
               <th className="text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground px-4 py-3">Order ID</th>
@@ -526,51 +444,11 @@ function OrderList({ orders, loading, emptyMessage, search, statusFilter, onView
 }
 
 export function HistoryPage({ category, title, subtitle, emptyMessage, statusOptions }: HistoryPageProps) {
-  const [orders, setOrders]       = useState<HistoryOrder[]>([]);
-  const [pagination, setPagination] = useState<Pagination>({ total: 0, page: 1, limit: 20, totalPages: 1 });
-  const [loading, setLoading]     = useState(true);
-  const [search, setSearch]       = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
-  const [page, setPage]           = useState(1);
-  const [selectedOrder, setSelectedOrder] = useState<HistoryOrder | null>(null);
-  const searchParams = useSearchParams();
-  const openOrderId = searchParams.get("open");
-  const autoOpenedRef = useRef(false);
-
-  const fetchOrders = useCallback(async () => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams({
-        category,
-        page: page.toString(),
-        limit: "20",
-      });
-      if (search)       params.set("search", search);
-      if (statusFilter) params.set("status", statusFilter);
-
-      const res = await fetch(`/api/orders/history?${params}`, { cache: "no-store" });
-      if (res.ok) {
-        const data = await res.json();
-        setOrders(data.orders ?? []);
-        setPagination(data.pagination ?? { total: 0, page: 1, limit: 20, totalPages: 1 });
-      }
-    } catch { console.error("Gagal fetch riwayat"); }
-    finally { setLoading(false); }
-  }, [category, page, search, statusFilter]);
-
-  useEffect(() => { fetchOrders(); }, [fetchOrders]);
-  useEffect(() => { setPage(1); }, [search, statusFilter]);
-
-  useEffect(() => {
-    if (!openOrderId || autoOpenedRef.current || loading || orders.length === 0) return;
-    const target = orders.find(o => o.orderId === openOrderId);
-    if (target) {
-      setSelectedOrder(target);
-      autoOpenedRef.current = true;
-    }
-  }, [openOrderId, orders, loading]);
-
-  const allStatuses = statusOptions ?? ["SUCCESS", "PROCESSING", "PENDING", "PENDING_PAYMENT", "FAILED", "EXPIRED"];
+  const {
+    orders, pagination, loading, search, setSearch,
+    statusFilter, setStatusFilter, page, setPage,
+    selectedOrder, setSelectedOrder, handleCloseDetail, allStatuses,
+  } = useOrderHistory<HistoryOrder>({ category, statusOptions });
 
   return (
     <div className="space-y-4 animate-fade-in">
@@ -645,7 +523,7 @@ export function HistoryPage({ category, title, subtitle, emptyMessage, statusOpt
       </div>
 
       {selectedOrder && (
-        <DetailModal order={selectedOrder} onClose={() => setSelectedOrder(null)} />
+        <DetailModal order={selectedOrder} onClose={handleCloseDetail} />
       )}
     </div>
   );

@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
+import crypto from "crypto";
 import prisma from "@/lib/prisma";
 import { sendMail, verificationOtpEmail } from "@/lib/mailer";
+import { createRateLimiter } from "@/lib/rate-limit";
+
+const registerLimiter = createRateLimiter({ interval: 60 * 60 * 1000, maxRequests: 5 });
 
 function generateOtp(): string {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+  return crypto.randomInt(100000, 1000000).toString();
 }
 
 export async function POST(req: NextRequest) {
@@ -20,6 +24,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         { error: "Semua field wajib diisi" },
         { status: 400 }
+      );
+    }
+
+    const rlResult = registerLimiter.check(email);
+    if (!rlResult.allowed) {
+      return NextResponse.json(
+        { error: "Terlalu banyak permintaan registrasi. Silakan coba lagi nanti." },
+        { status: 429 }
       );
     }
 
@@ -134,7 +146,7 @@ export async function POST(req: NextRequest) {
       { status: 201 }
     );
   } catch (error) {
-    console.error("Register error:", error);
+    console.error("[Register] Error");
     return NextResponse.json(
       { error: "Terjadi kesalahan server" },
       { status: 500 }

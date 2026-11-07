@@ -60,7 +60,7 @@ export async function placeOrder(params: {
   serviceName: string;
   imeiList: string[];
   pricePerUnit: number;
-}): Promise<Order & { paymentId: string; qrisId: string; trxId: string; qrImage: string; fee: number; totalAmount: number; expiresAt: string }> {
+}): Promise<Order & { paymentId?: string; qrisId?: string; trxId?: string; qrImage?: string; fee?: number; totalAmount?: number; expiresAt?: string; isDirectOrder?: boolean; results?: unknown; ceirOrderId?: string }> {
   const res = await fetch("/api/orders", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -76,13 +76,31 @@ export async function placeOrder(params: {
 
   const data = await res.json();
 
+  // Direct order (reseller) — different response shape
+  if (data.isDirectOrder) {
+    return {
+      orderId: data.orderId,
+      serviceId: params.serviceId,
+      serviceName: data.serviceName ?? params.serviceName,
+      imeiList: params.imeiList,
+      totalPrice: data.totalPrice,
+      paymentMethod: "GOPAY_QRIS" as const,
+      status: (data.status ?? "PENDING") as OrderStatus,
+      results: data.results ?? undefined,
+      createdAt: new Date().toISOString(),
+      isDirectOrder: true,
+      ceirOrderId: data.ceirOrderId ?? undefined,
+    };
+  }
+
+  // Regular user order — QRIS payment flow
   return {
     orderId: data.orderId,
     serviceId: params.serviceId,
     serviceName: params.serviceName,
     imeiList: params.imeiList,
     totalPrice: data.totalPrice,
-    paymentMethod: "GOPAY_QRIS",
+    paymentMethod: "GOPAY_QRIS" as const,
     status: "PENDING_PAYMENT" as OrderStatus,
     createdAt: new Date().toISOString(),
     paymentId: data.paymentId,
@@ -102,7 +120,7 @@ export async function getOrderStats(): Promise<{ total: number; pending: number;
   const orders = await getOrders();
   return {
     total: orders.length,
-    pending: orders.filter((o) => o.status === "PENDING" || o.status === "PROCESSING" || o.status === "PENDING_PAYMENT" as OrderStatus).length,
+    pending: orders.filter((o) => o.status === "PENDING" || o.status === "PROCESSING" || o.status === "PENDING_PAYMENT").length,
     failed: orders.filter((o) => o.status === "FAILED").length,
   };
 }

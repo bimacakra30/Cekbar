@@ -1,34 +1,52 @@
-
 import prisma from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
 import { createCeirOrder, addRoamer, fetchServiceList } from "@/lib/ceirid";
 
 export async function processOrderAfterPayment(orderId: string) {
   try {
-    const rows = await prisma.$queryRaw<Record<string, unknown>[]>`
-      SELECT o.order_id, o.service_id, o.service_name, o.imei_list, o.status,
-             s.api_provider, s.api_service_id, s.api_type
-      FROM orders o
-      LEFT JOIN services s ON s.service_name = o.service_name
-      WHERE o.order_id = ${orderId}
-      LIMIT 1
-    `;
+    const order = await prisma.order.findUnique({
+      where: { order_id: orderId },
+      select: {
+        order_id: true,
+        service_id: true,
+        service_name: true,
+        imei_list: true,
+        status: true,
+      },
+    });
 
-    if (rows.length === 0) {
+    if (!order) {
       console.error(`[ProcessOrder] Order ${orderId} tidak ditemukan`);
       return;
     }
-
-    const order = rows[0];
 
     if (order.status !== "PENDING") {
       console.log(`[ProcessOrder] Order ${orderId}: status=${order.status}, bukan PENDING → skip`);
       return;
     }
 
-    const apiProvider = String(order.api_provider ?? "");
-    const apiServiceId = order.api_service_id ? String(order.api_service_id) : null;
-    const apiType = String(order.api_type ?? "");
+    const service = await prisma.service.findFirst({
+      where: { service_id: order.service_id },
+      select: { api_provider: true, api_service_id: true, api_type: true },
+    });
+
+    const apiProvider = service?.api_provider ?? "";
+    const apiServiceId = service?.api_service_id ?? null;
+    const apiType = service?.api_type ?? "";
+
+    // ── Manual order → masuk antrian admin, tidak call API ──
+    if (apiProvider === "manual") {
+      await prisma.order.update({
+        where: { order_id: orderId },
+        data: {
+          status: "PENDING",
+          is_manual_order: true,
+          status_note: "Menunggu diproses oleh admin",
+        },
+      });
+      console.log(`[ProcessOrder] Order ${orderId}: Manual order, masuk antrian admin`);
+      return;
+    }
 
     if (apiProvider !== "ceir" || !apiServiceId) {
       console.log(`[ProcessOrder] Order ${orderId}: provider="${apiProvider}", bukan CEIR → skip auto-process`);
@@ -138,6 +156,8 @@ export async function processOrderAfterPayment(orderId: string) {
         status_note: statusNote,
         results: { error: ceirErr.message, errorCode: ceirErr.errorCode },
       },
+    }).catch((updateErr) => {
+      console.error(`[ProcessOrder] Order ${orderId}: gagal update status FAILED:`, updateErr);
     });
   }
 }
